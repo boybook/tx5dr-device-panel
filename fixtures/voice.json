@@ -1,0 +1,7 @@
+{
+  "engine": { "running": true, "mode": "voice", "currentMode": { "name": "VOICE" }, "state": "running" },
+  "radio": { "connected": true, "frequency": 145500000, "radioMode": "FM", "ptt": false, "tx": false },
+  "voice": { "active": true, "radioMode": "FM", "pttLocked": false, "pttLockedByLabel": null, "keyerActive": false, "keyerMode": null, "keyerSlotId": null },
+  "access": { "localUrl": "http://192.168.1.10:8076" },
+  "updatedAt": 1778697600000
+}

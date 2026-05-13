@@ -1,0 +1,16 @@
+{
+  "engine": { "running": true, "mode": "digital", "currentMode": { "name": "FT8", "slotMs": 15000 }, "state": "running" },
+  "radio": { "connected": true, "frequency": 7074000, "radioMode": "USB-D", "ptt": false, "tx": false },
+  "ft8": {
+    "slot": { "id": "FT8-1", "startMs": 1778697600000, "phaseMs": 0, "cycleNumber": 4, "utcSeconds": 43215, "mode": "FT8" },
+    "utc": 43215,
+    "cycle": 4,
+    "periodMs": 15000,
+    "recentDecodeRawMessages": ["CQ JA1ABC PM95", "BG5DRB K1ABC -10", "CQ DX VK2XYZ QF56"],
+    "lastDecodeRawMessage": "CQ DX VK2XYZ QF56",
+    "recentFrames": [{ "snr": -10, "freq": 1200, "dt": 0.1, "message": "CQ DX VK2XYZ QF56", "operatorId": null }],
+    "currentTx": { "active": false, "operatorIds": [], "messages": [], "lastMessage": null, "slotStartMs": null }
+  },
+  "access": { "localUrl": "http://192.168.1.10:8076" },
+  "updatedAt": 1778697600000
+}

@@ -361,6 +361,22 @@ def test_cw_decoder_disabled_centers_last_sent_and_ignores_stale_transcript():
     assert not any(command.kind == "line" and command.y == 53 for command in frame.commands)
 
 
+def test_cw_decoder_enabled_empty_state_waits_for_decodes_in_global_language():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "cw.json").read_text())
+    payload["cw"]["decoder"]["committedText"] = ""
+    payload["cw"]["decoder"]["pendingText"] = ""
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    zh_frame = render_snapshot(snapshot, language="zh")
+    en_frame = render_snapshot(snapshot, language="en")
+    zh_texts = [command.text for command in zh_frame.commands if command.kind == "text"]
+    en_texts = [command.text for command in en_frame.commands if command.kind == "text"]
+
+    assert "等待解码结果..." in zh_texts
+    assert "WAITING DECODES..." in en_texts
+    assert any(command.kind == "line" and command.y == 53 for command in zh_frame.commands)
+
+
 def test_cw_footer_precedence_and_tx_badge_do_not_trigger_global_ptt_highlight():
     store = PanelStore()
     payload = json.loads((FIXTURES / "cw.json").read_text())

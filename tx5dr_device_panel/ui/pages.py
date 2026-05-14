@@ -272,6 +272,8 @@ def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
         return
     if committed or pending:
         _render_cw_transcript(frame, committed, pending)
+    else:
+        _center_text(frame, 31, _cw_waiting_decode_text(language))
 
     frame.line(0, 53, 127, 53)
     _render_tx_footer(
@@ -374,6 +376,10 @@ def _cw_empty_lines(language: str) -> list[str]:
     if language.lower().startswith("zh"):
         return ["还未发报", "网页操作发报"]
     return ["NO TX YET", "SEND FROM WEB"]
+
+
+def _cw_waiting_decode_text(language: str) -> str:
+    return "等待解码结果..." if language.lower().startswith("zh") else "WAITING DECODES..."
 
 
 def _wrap_center_lines(text: str, width: int, max_lines: int) -> list[str]:

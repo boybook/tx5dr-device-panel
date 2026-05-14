@@ -149,6 +149,7 @@ def test_access_page_does_not_fallback_to_local_domain_without_server_url():
     store = PanelStore()
     payload = json.loads((FIXTURES / "access.json").read_text())
     payload["access"]["localUrl"] = None
+    payload["access"]["localUrls"] = []
     snapshot = store.apply({"type": "snapshot", "payload": payload})
     texts = [command.text for command in render_snapshot(snapshot, language="zh").commands if command.kind == "text"]
 
@@ -180,6 +181,21 @@ def test_access_page_carousel_rotates_network_detail_deterministically():
     assert first_frame.commands == first_again.commands
     assert "SSID TX5DR" not in [command.text for command in first_frame.commands if command.kind == "text"]
     assert "SSID TX5DR" in second_texts
+
+
+def test_access_page_carousel_rotates_server_provided_local_urls():
+    payload = json.loads((FIXTURES / "access.json").read_text())
+    payload["access"]["localUrls"] = ["http://192.168.1.10:8076", "http://10.0.0.5:8076"]
+    payload["updatedAt"] = 0
+    first = PanelStore().apply({"type": "snapshot", "payload": payload})
+    payload["updatedAt"] = 3000
+    second = PanelStore().apply({"type": "snapshot", "payload": payload})
+
+    first_texts = [command.text for command in render_snapshot(first, language="zh").commands if command.kind == "text"]
+    second_texts = [command.text for command in render_snapshot(second, language="zh").commands if command.kind == "text"]
+
+    assert "192.168.1.10:8076" in first_texts
+    assert "10.0.0.5:8076" in second_texts
 
 
 def test_access_page_uses_minimal_centered_title_and_particle_field():

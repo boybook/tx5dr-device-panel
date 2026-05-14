@@ -86,7 +86,7 @@ DEFAULT_SNAPSHOT: Snapshot = {
         "keyerMode": None,
         "keyerSlotId": None,
     },
-    "access": {"localUrl": None},
+    "access": {"localUrl": None, "localUrls": []},
     "network": {
         "connected": False,
         "interface": None,

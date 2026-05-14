@@ -162,7 +162,7 @@ def _access_view(snapshot: Snapshot, language: str) -> AccessView:
         )
 
     network_line = text["ssid"].format(ssid=ssid) if ssid else text["ip"].format(ip=ip)
-    url = _access_url(access)
+    url = _access_url(access, snapshot)
     if last_error:
         return AccessView(
             title=text["server_down"],
@@ -199,11 +199,20 @@ def _network_hint(text: dict[str, str], network: dict[str, Any]) -> str:
     return text["connect_network"]
 
 
-def _access_url(access: dict[str, Any]) -> str:
-    url = access.get("localUrl")
+def _access_url(access: dict[str, Any], snapshot: Snapshot) -> str:
+    urls = access.get("localUrls")
+    if isinstance(urls, list):
+        normalized = [_normalize_access_url(url) for url in urls]
+        normalized = [url for url in normalized if url]
+        if normalized:
+            return _access_carousel_message(normalized, snapshot)
+    return _normalize_access_url(access.get("localUrl"))
+
+
+def _normalize_access_url(url: Any) -> str:
     if not isinstance(url, str) or not url.strip():
         return ""
-    return url.replace("http://", "").replace("https://", "").rstrip("/")
+    return url.strip().replace("http://", "").replace("https://", "").rstrip("/")
 
 
 def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:

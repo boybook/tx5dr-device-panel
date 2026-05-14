@@ -112,7 +112,7 @@ def test_text_metrics_use_real_fusion_pixel_font_advance_for_symbols():
     assert metrics.text_width("中") == 8
     assert metrics.text_width("A") == 4
     assert metrics.text_width("FT8·21.074") == 40
-    assert metrics.text_width("031945 ×10") == 40
+    assert metrics.text_width("031945×10") == 36
     assert metrics.text_width("00:00:00 UTC · 40m · FT8") == 96
 
 
@@ -278,7 +278,9 @@ def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
 
     assert any(text and "UTC 12:00:15" in text for text in texts)
     assert "FT8·7.074" in texts
-    assert "120015 ×10" in texts
+    assert "15/45×10" in texts
+    assert next(command for command in frame.commands if command.kind == "text" and command.text == "15/45×10").fill == 0
+    assert any(command.kind == "filled_rect" and command.y == 55 and command.x2 == 127 for command in frame.commands)
     assert "日本·东京" in texts
     assert sum(
         1
@@ -330,11 +332,105 @@ def test_ft8_cycle_header_renders_as_inverse_scroll_row():
     )
 
 
-def test_ft8_cycle_header_stays_when_cycle_has_no_decodes():
+def test_ft8_cycle_header_is_not_created_for_empty_first_batch():
     snapshot = _ft8_scroll_snapshot(0, updated_at=0)
     lines = _ft8_row_texts(render_snapshot(snapshot))
 
-    assert lines == ["00:00:00 UTC · 40m · FT8"]
+    assert lines == []
+
+
+def test_ft8_empty_new_cycle_keeps_previous_rendered_cycle_header():
+    store = PanelStore(now_ms=lambda: 0)
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    payload["updatedAt"] = 0
+    payload["ft8"]["slot"] = {"id": "FT8-1", "startMs": 0, "utcSeconds": 0, "mode": "FT8"}
+    payload["ft8"]["recentFramesSlotId"] = "FT8-1"
+    payload["ft8"]["recentFramesSlotStartMs"] = 0
+    payload["ft8"]["recentFrames"] = [{"slotId": "FT8-1", "slotStartMs": 0, "message": "OLD"}]
+    store.apply({"type": "snapshot", "payload": payload})
+
+    empty = json.loads(json.dumps(payload))
+    empty["ft8"]["slot"] = {"id": "FT8-2", "startMs": 15_000, "utcSeconds": 15, "mode": "FT8"}
+    empty["ft8"]["recentFramesSlotId"] = "FT8-2"
+    empty["ft8"]["recentFramesSlotStartMs"] = 15_000
+    empty["ft8"]["recentFrames"] = []
+    snapshot = store.apply({"type": "snapshot", "payload": empty})
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert lines == ["00:00:00 UTC · 40m · FT8", "OLD"]
+    footer_texts = [command.text for command in render_snapshot(snapshot).commands if command.kind == "text" and command.y == 55]
+    assert "00/30×1" in footer_texts
+
+
+def test_ft8_footer_cycle_label_uses_display_slot_not_current_utc():
+    store = PanelStore(now_ms=lambda: 0)
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    payload["updatedAt"] = 0
+    payload["ft8"]["utc"] = 0
+    payload["ft8"]["slot"] = {"id": "FT8-1", "startMs": 0, "utcSeconds": 0, "mode": "FT8"}
+    payload["ft8"]["recentFramesSlotId"] = "FT8-1"
+    payload["ft8"]["recentFramesSlotStartMs"] = 0
+    payload["ft8"]["recentFrames"] = [{"slotId": "FT8-1", "slotStartMs": 0, "message": "OLD"}]
+    store.apply({"type": "snapshot", "payload": payload})
+
+    empty = json.loads(json.dumps(payload))
+    empty["ft8"]["utc"] = 15
+    empty["ft8"]["slot"] = {"id": "FT8-2", "startMs": 15_000, "utcSeconds": 15, "mode": "FT8"}
+    empty["ft8"]["recentFramesSlotId"] = "FT8-2"
+    empty["ft8"]["recentFramesSlotStartMs"] = 15_000
+    empty["ft8"]["recentFrames"] = []
+    snapshot = store.apply({"type": "snapshot", "payload": empty})
+    footer_texts = [command.text for command in render_snapshot(snapshot).commands if command.kind == "text" and command.y == 55]
+
+    assert "00/30×1" in footer_texts
+    assert "15/45×1" not in footer_texts
+
+
+def test_ft4_footer_cycle_label_is_localized_even_odd():
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    payload["ft8"]["periodMs"] = 7_500
+    payload["ft8"]["slot"] = {
+        "id": "FT4-1",
+        "startMs": 7_500,
+        "phaseMs": 0,
+        "cycleNumber": 1,
+        "utcSeconds": 7.5,
+        "mode": "FT4",
+    }
+    payload["ft8"]["recentFramesSlotId"] = "FT4-1"
+    payload["ft8"]["recentFramesSlotStartMs"] = 7_500
+    payload["ft8"]["recentFrames"] = [{"slotId": "FT4-1", "slotStartMs": 7_500, "message": "FT4 MSG"}]
+    snapshot = PanelStore().apply({"type": "snapshot", "payload": payload})
+
+    zh_footer = [command.text for command in render_snapshot(snapshot, language="zh").commands if command.kind == "text" and command.y == 55]
+    en_footer = [command.text for command in render_snapshot(snapshot, language="en").commands if command.kind == "text" and command.y == 55]
+
+    assert "奇数×1" in zh_footer
+    assert "ODD×1" in en_footer
+    zh_frame = render_snapshot(snapshot, language="zh")
+    assert next(command for command in zh_frame.commands if command.kind == "text" and command.text == "奇数×1").fill == 0
+    assert any(command.kind == "filled_rect" and command.y == 55 and command.x2 == 127 for command in zh_frame.commands)
+
+
+def test_ft4_even_footer_cycle_label_is_not_highlighted():
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    payload["ft8"]["periodMs"] = 7_500
+    payload["ft8"]["slot"] = {
+        "id": "FT4-2",
+        "startMs": 15_000,
+        "phaseMs": 0,
+        "cycleNumber": 2,
+        "utcSeconds": 15,
+        "mode": "FT4",
+    }
+    payload["ft8"]["recentFramesSlotId"] = "FT4-2"
+    payload["ft8"]["recentFramesSlotStartMs"] = 15_000
+    payload["ft8"]["recentFrames"] = [{"slotId": "FT4-2", "slotStartMs": 15_000, "message": "FT4 MSG"}]
+    snapshot = PanelStore().apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot, language="zh")
+
+    assert next(command for command in frame.commands if command.kind == "text" and command.text == "偶数×1").fill == 1
+    assert not any(command.kind == "filled_rect" and command.y == 55 and command.x2 == 127 for command in frame.commands)
 
 
 def test_ft8_dynamic_scroll_uses_step_one_for_medium_batches():
@@ -371,9 +467,9 @@ def test_ft8_own_callsign_rows_are_fixed_above_scrolling_traffic():
     frame = render_snapshot(snapshot)
     lines = _ft8_row_texts(frame)
 
-    assert lines[:2] == ["K1ABC BG5DRB -10", "BG5DRB K1ABC R-12"]
-    assert all("BG5DRB" not in line for line in lines[2:])
-    assert sum(command.kind == "filled_rect" and command.y in {12, 22} for command in frame.commands) >= 2
+    assert lines[:3] == ["00:00:00 UTC · 40m · FT8", "K1ABC BG5DRB -10", "BG5DRB K1ABC R-12"]
+    assert all("BG5DRB" not in line for line in lines[3:])
+    assert sum(command.kind == "filled_rect" and command.y in {22, 32} for command in frame.commands) >= 2
 
 
 def test_ft8_four_own_callsign_rows_suppress_other_traffic():
@@ -385,7 +481,8 @@ def test_ft8_four_own_callsign_rows_suppress_other_traffic():
     lines = _ft8_row_texts(render_snapshot(snapshot))
 
     assert len(lines) == 4
-    assert all("BG5DRB" in line for line in lines)
+    assert lines[0] == "00:00:00 UTC · 40m · FT8"
+    assert all("BG5DRB" in line for line in lines[1:])
 
 
 def test_ft8_many_own_callsign_rows_scroll_only_own_traffic():
@@ -397,7 +494,7 @@ def test_ft8_many_own_callsign_rows_scroll_only_own_traffic():
     lines = _ft8_row_texts(render_snapshot(snapshot))
 
     assert lines == [
-        "BG5DRB K2ABC R-12",
+        "00:00:00 UTC · 40m · FT8",
         "BG5DRB K3ABC R-12",
         "BG5DRB K4ABC R-12",
         "BG5DRB K5ABC R-12",

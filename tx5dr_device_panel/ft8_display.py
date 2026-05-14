@@ -112,6 +112,12 @@ def scroll_start_index(
 
 
 def ft8_display_entries(snapshot: dict[str, Any]) -> list[Any]:
+    ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
+    display = ft8.get("_display") if isinstance(ft8.get("_display"), dict) else {}
+    entries = display.get("entries")
+    if isinstance(entries, list):
+        return [entry for entry in entries if entry_message(entry)]
+
     entries = ft8_decode_entries(snapshot)
     header = ft8_cycle_header_entry(snapshot)
     return [header, *entries] if header else entries
@@ -158,8 +164,21 @@ def is_own_entry(entry: Any, own_callsign: str | None) -> bool:
 
 def ft8_scroll_metrics(snapshot: dict[str, Any], own_callsign: str | None = None) -> Ft8ScrollMetrics:
     entries = ft8_display_entries(snapshot)
+    has_header = any(is_cycle_header(entry) for entry in entries)
     own_entries = [entry for entry in entries if is_own_entry(entry, own_callsign)]
-    if len(own_entries) >= FT8_VISIBLE_ROWS:
+    if has_header and own_entries:
+        rows_after_header = FT8_VISIBLE_ROWS - 1
+        if len(own_entries) >= rows_after_header:
+            active_count = len(own_entries)
+            rows = rows_after_header
+        else:
+            rows = rows_after_header - len(own_entries)
+            active_count = len([
+                entry
+                for entry in entries
+                if not is_cycle_header(entry) and not is_own_entry(entry, own_callsign)
+            ])
+    elif len(own_entries) >= FT8_VISIBLE_ROWS:
         active_count = len(own_entries)
         rows = FT8_VISIBLE_ROWS
     else:

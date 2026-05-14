@@ -6,8 +6,7 @@ from typing import Any
 from tx5dr_device_panel.ft8_display import (
     FT8_VISIBLE_ROWS,
     entry_message as _ft8_entry_message,
-    ft8_cycle_header_entry,
-    ft8_decode_entries,
+    ft8_display_entries,
     is_own_entry,
     is_cycle_header,
     scroll_start_index,
@@ -271,7 +270,8 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: 
     tx_text = tx.get("lastMessage") or (tx.get("messages") or [None])[-1] or "RX MONITOR"
     frame.line(0, 53, 127, 53)
     count = _cycle_message_count(ft8)
-    count_label = f"{_cycle_utc_compact(ft8)} ×{count}"
+    period_label, period_highlight = _cycle_period_label(snapshot, language)
+    count_label = f"{period_label}×{count}"
     _render_tx_footer(
         frame,
         tx_text=str(tx_text),
@@ -280,7 +280,7 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: 
         right_label=count_label,
         metrics=metrics,
     )
-    _right_text(frame, 126, 55, count_label, metrics=metrics)
+    _render_footer_right_label(frame, 126, 55, count_label, highlighted=period_highlight, metrics=metrics)
 
 
 def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: TextMetrics) -> None:
@@ -467,7 +467,7 @@ def _render_tx_footer(
     metrics: TextMetrics,
 ) -> None:
     right_width = _text_width(right_label, metrics=metrics) if right_label else 0
-    content_right = 126 - right_width - (4 if right_label else 0)
+    content_right = 126 - right_width - (2 if right_label else 0)
     tx_indicator_active = tx_armed or ptt_active
     if not tx_indicator_active:
         frame.text(2, FT8_FOOTER_Y, _clip_width(tx_text, content_right - 2, metrics=metrics))
@@ -479,6 +479,22 @@ def _render_tx_footer(
     frame.text(2, FT8_FOOTER_Y, label, fill=0)
     message_x = 2 + label_width + 4
     frame.text(message_x, FT8_FOOTER_Y, _clip_width(tx_text, max(8, content_right - message_x), metrics=metrics))
+
+
+def _render_footer_right_label(
+    frame: RenderFrame,
+    right_x: int,
+    y: int,
+    text: str,
+    highlighted: bool,
+    metrics: TextMetrics,
+) -> None:
+    if not highlighted:
+        _right_text(frame, right_x, y, text, metrics=metrics)
+        return
+    x = metrics.right_x(right_x, text)
+    frame.filled_rect(max(0, x - 1), y, 127, 63, fill=1)
+    frame.text(x, y, text, fill=0)
 
 
 def _mode_name(snapshot: Snapshot) -> str:
@@ -513,8 +529,23 @@ def _decode_window(
     own_callsign: str | None = None,
 ) -> list[Any]:
     values = [message for message in messages if _entry_message(message)]
-    own_entries = [message for message in values if is_own_entry(message, own_callsign)]
-    other_entries = [message for message in values if not is_own_entry(message, own_callsign)]
+    header_entries = [message for message in values if is_cycle_header(message)]
+    body_entries = [message for message in values if not is_cycle_header(message)]
+    own_entries = [message for message in body_entries if is_own_entry(message, own_callsign)]
+    other_entries = [message for message in body_entries if not is_own_entry(message, own_callsign)]
+
+    if header_entries and own_entries:
+        remaining_rows = rows - 1
+        if remaining_rows <= 0:
+            return header_entries[:rows]
+        if len(own_entries) >= remaining_rows:
+            start = scroll_start_index(snapshot, len(own_entries), remaining_rows)
+            return [header_entries[0], *own_entries[start:start + remaining_rows]]
+        return [
+            header_entries[0],
+            *own_entries,
+            *_scrolling_slice(other_entries, snapshot, remaining_rows - len(own_entries)),
+        ]
 
     if len(own_entries) >= rows:
         start = scroll_start_index(snapshot, len(own_entries), rows)
@@ -540,11 +571,7 @@ def _scrolling_slice(values: list[Any], snapshot: Snapshot, rows: int) -> list[A
 
 
 def _decode_entries(snapshot: Snapshot) -> list[Any]:
-    return [
-        entry
-        for entry in [ft8_cycle_header_entry(snapshot), *ft8_decode_entries(snapshot)]
-        if entry
-    ]
+    return [entry for entry in ft8_display_entries(snapshot) if entry]
 
 
 def _entry_message(entry: Any) -> str:
@@ -569,19 +596,81 @@ def _cycle_message_count(ft8: dict[str, Any]) -> int:
     return len(messages) if isinstance(messages, list) else 0
 
 
-def _cycle_utc_compact(ft8: dict[str, Any]) -> str:
-    utc_seconds = ft8.get("utc")
-    if isinstance(utc_seconds, (int, float)):
-        return _format_utc_compact(utc_seconds)
-    slot = ft8.get("slot")
-    if isinstance(slot, dict) and isinstance(slot.get("utcSeconds"), (int, float)):
-        return _format_utc_compact(slot["utcSeconds"])
-    return "------"
+def _cycle_period_label(snapshot: Snapshot, language: str) -> tuple[str, bool]:
+    ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
+    if _display_mode_is_ft4(snapshot):
+        cycle_number = _display_cycle_number(ft8)
+        if cycle_number is None:
+            cycle_number = _derived_display_cycle_number(ft8)
+        is_even = cycle_number is None or cycle_number % 2 == 0
+        if language.lower().startswith("zh"):
+            return ("偶数" if is_even else "奇数", not is_even)
+        return ("EVEN" if is_even else "ODD", not is_even)
+
+    second = _display_slot_second(ft8)
+    if second is None:
+        return "--", False
+    is_primary = second % 30 == 0
+    return ("00/30" if is_primary else "15/45", not is_primary)
 
 
-def _format_utc_compact(utc_seconds: float) -> str:
-    total_seconds = int(utc_seconds) % 86_400
-    return f"{total_seconds // 3600:02d}{(total_seconds // 60) % 60:02d}{total_seconds % 60:02d}"
+def _display_mode_is_ft4(snapshot: Snapshot) -> bool:
+    ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
+    display = ft8.get("_display") if isinstance(ft8.get("_display"), dict) else {}
+    slot = ft8.get("slot") if isinstance(ft8.get("slot"), dict) else {}
+    engine = snapshot.get("engine") if isinstance(snapshot.get("engine"), dict) else {}
+    current = engine.get("currentMode") if isinstance(engine.get("currentMode"), dict) else {}
+    mode = str(display.get("mode") or slot.get("mode") or current.get("name") or engine.get("mode") or "").upper()
+    period = display.get("periodMs") or ft8.get("periodMs") or current.get("slotMs")
+    return "FT4" in mode or (isinstance(period, (int, float)) and 0 < period <= 8_000)
+
+
+def _display_cycle_number(ft8: dict[str, Any]) -> int | None:
+    display = ft8.get("_display") if isinstance(ft8.get("_display"), dict) else {}
+    value = display.get("cycleNumber")
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def _derived_display_cycle_number(ft8: dict[str, Any]) -> int | None:
+    start_ms = _display_slot_start_ms(ft8)
+    display = ft8.get("_display") if isinstance(ft8.get("_display"), dict) else {}
+    period_ms = display.get("periodMs") or ft8.get("periodMs")
+    if not isinstance(start_ms, (int, float)) or not isinstance(period_ms, (int, float)) or period_ms <= 0:
+        return None
+    return int(start_ms // period_ms)
+
+
+def _display_slot_second(ft8: dict[str, Any]) -> int | None:
+    start_ms = _display_slot_start_ms(ft8)
+    if isinstance(start_ms, (int, float)):
+        return int(start_ms / 1000) % 60
+    display = ft8.get("_display") if isinstance(ft8.get("_display"), dict) else {}
+    entries = display.get("entries")
+    if isinstance(entries, list) and entries:
+        first = entries[0]
+        if isinstance(first, dict) and isinstance(first.get("slotStartMs"), (int, float)):
+            return int(first["slotStartMs"] / 1000) % 60
+    return None
+
+
+def _display_slot_start_ms(ft8: dict[str, Any]) -> int | float | None:
+    display = ft8.get("_display") if isinstance(ft8.get("_display"), dict) else {}
+    value = display.get("slotStartMs")
+    if isinstance(value, (int, float)):
+        return value
+    value = ft8.get("recentFramesSlotStartMs")
+    if isinstance(value, (int, float)):
+        return value
+    frames = ft8.get("recentFrames")
+    if isinstance(frames, list) and frames:
+        first = frames[0]
+        if isinstance(first, dict) and isinstance(first.get("slotStartMs"), (int, float)):
+            return first["slotStartMs"]
+    slot = ft8.get("slot") if isinstance(ft8.get("slot"), dict) else {}
+    value = slot.get("startMs")
+    return value if isinstance(value, (int, float)) else None
 
 
 def _inverse_text(frame: RenderFrame, x: int, y: int, text: str, metrics: TextMetrics) -> None:

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import time
 from typing import Any, Callable
 
-from tx5dr_device_panel.ft8_display import entry_message, normalize_message, scroll_start_index
+from tx5dr_device_panel.ft8_display import entry_message, ft8_cycle_header_entry, normalize_message, scroll_start_index
 from tx5dr_device_panel.models import DEFAULT_SNAPSHOT, Snapshot
 
 
@@ -13,6 +13,10 @@ from tx5dr_device_panel.models import DEFAULT_SNAPSHOT, Snapshot
 class Ft8DisplayState:
     slot_id: str | None = None
     slot_start_ms: int | float | None = None
+    period_ms: int | None = None
+    mode: str | None = None
+    cycle_number: int | None = None
+    header_entry: dict[str, Any] | None = None
     entries: list[Any] = field(default_factory=list)
     first_received_at_ms: int | None = None
     last_batch_signature: tuple[str, ...] = field(default_factory=tuple)
@@ -69,9 +73,14 @@ class PanelStore:
         now_ms = self.now_ms()
         batch_signature = _batch_signature(incoming_entries)
         if self._ft8_display.slot_id != frame_slot_id:
+            slot_start_ms = _slot_start_ms(ft8, incoming_entries)
             self._ft8_display = Ft8DisplayState(
                 slot_id=frame_slot_id,
-                slot_start_ms=_slot_start_ms(ft8, incoming_entries),
+                slot_start_ms=slot_start_ms,
+                period_ms=_period_ms(snapshot),
+                mode=_slot_mode(snapshot),
+                cycle_number=_cycle_number(ft8),
+                header_entry=_header_entry(snapshot, frame_slot_id, slot_start_ms),
                 entries=_dedupe_entries(incoming_entries),
                 first_received_at_ms=now_ms,
                 last_batch_signature=batch_signature,
@@ -85,7 +94,7 @@ class PanelStore:
                     previous_for_scroll["updatedAt"] = snapshot["updatedAt"]
                 self._ft8_display.scroll_anchor_index = scroll_start_index(
                     previous_for_scroll,
-                    len(self._ft8_display.entries),
+                    len(_display_entries(self._ft8_display)),
                     4,
                 )
                 self._ft8_display.scroll_anchor_time_ms = now_ms
@@ -94,6 +103,9 @@ class PanelStore:
             self._ft8_display.slot_start_ms = (
                 self._ft8_display.slot_start_ms or _slot_start_ms(ft8, incoming_entries)
             )
+            self._ft8_display.period_ms = self._ft8_display.period_ms or _period_ms(snapshot)
+            self._ft8_display.mode = self._ft8_display.mode or _slot_mode(snapshot)
+            self._ft8_display.cycle_number = self._ft8_display.cycle_number if self._ft8_display.cycle_number is not None else _cycle_number(ft8)
 
         _apply_ft8_display_state(ft8, self._ft8_display)
 
@@ -251,10 +263,15 @@ def _apply_ft8_display_state(ft8: dict[str, Any], state: Ft8DisplayState) -> Non
 def _attach_display_metadata(ft8: dict[str, Any], state: Ft8DisplayState) -> None:
     ft8["_display"] = {
         "slotId": state.slot_id,
+        "slotStartMs": state.slot_start_ms,
+        "periodMs": state.period_ms,
+        "mode": state.mode,
+        "cycleNumber": state.cycle_number,
         "firstReceivedAtMs": state.first_received_at_ms,
         "scrollAnchorIndex": state.scroll_anchor_index,
         "scrollAnchorTimeMs": state.scroll_anchor_time_ms,
         "uniqueCount": len(state.entries),
+        "entries": _display_entries(state),
     }
 
 
@@ -268,3 +285,55 @@ def _carry_previous_ft8_display(ft8: dict[str, Any], previous_ft8: dict[str, Any
         previous_messages if isinstance(previous_messages, list) else []
     )
     ft8["lastDecodeRawMessage"] = previous_ft8.get("lastDecodeRawMessage")
+
+
+def _header_entry(snapshot: Snapshot, slot_id: str, slot_start_ms: int | float | None) -> dict[str, Any] | None:
+    header_snapshot = deepcopy(snapshot)
+    if slot_start_ms is not None and isinstance(header_snapshot.get("ft8"), dict):
+        header_snapshot["ft8"]["recentFramesSlotStartMs"] = slot_start_ms
+    header = ft8_cycle_header_entry(header_snapshot)
+    if not header:
+        return None
+    header = deepcopy(header)
+    header["slotId"] = slot_id
+    if slot_start_ms is not None:
+        header["slotStartMs"] = slot_start_ms
+    return header
+
+
+def _display_entries(state: Ft8DisplayState) -> list[Any]:
+    entries = deepcopy(state.entries)
+    return [deepcopy(state.header_entry), *entries] if state.header_entry else entries
+
+
+def _period_ms(snapshot: Snapshot) -> int | None:
+    ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
+    period = ft8.get("periodMs")
+    if isinstance(period, (int, float)) and period > 0:
+        return int(period)
+    engine = snapshot.get("engine") if isinstance(snapshot.get("engine"), dict) else {}
+    current = engine.get("currentMode") if isinstance(engine.get("currentMode"), dict) else {}
+    slot_ms = current.get("slotMs")
+    if isinstance(slot_ms, (int, float)) and slot_ms > 0:
+        return int(slot_ms)
+    return None
+
+
+def _slot_mode(snapshot: Snapshot) -> str | None:
+    ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
+    slot = ft8.get("slot") if isinstance(ft8.get("slot"), dict) else {}
+    if slot.get("mode"):
+        return str(slot["mode"]).upper()
+    engine = snapshot.get("engine") if isinstance(snapshot.get("engine"), dict) else {}
+    current = engine.get("currentMode") if isinstance(engine.get("currentMode"), dict) else {}
+    mode = current.get("name") or engine.get("mode")
+    return str(mode).upper() if mode else None
+
+
+def _cycle_number(ft8: dict[str, Any]) -> int | None:
+    slot = ft8.get("slot") if isinstance(ft8.get("slot"), dict) else {}
+    value = slot.get("cycleNumber")
+    if isinstance(value, (int, float)):
+        return int(value)
+    value = ft8.get("cycle")
+    return int(value) if isinstance(value, (int, float)) else None

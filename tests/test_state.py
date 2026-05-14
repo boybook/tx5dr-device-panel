@@ -50,6 +50,11 @@ def test_ft8_decodes_are_scoped_to_current_cycle_frames():
         },
     })
     assert first["ft8"]["recentDecodeRawMessages"] == ["NOW A"]
+    assert first["ft8"]["_display"]["entries"][0]["_kind"] == "ft8_cycle_header"
+    assert first["ft8"]["_display"]["entries"][0]["message"] == "00:00:15 UTC · FT8"
+    assert first["ft8"]["_display"]["entries"][1]["message"] == "NOW A"
+    assert first["ft8"]["_display"]["slotId"] == "FT8-1"
+    assert first["ft8"]["_display"]["slotStartMs"] == 15_000
 
     next_slot = store.apply({
         "type": "snapshot",
@@ -67,6 +72,7 @@ def test_ft8_decodes_are_scoped_to_current_cycle_frames():
     assert next_slot["ft8"]["recentDecodeRawMessages"] == ["NOW A"]
     assert next_slot["ft8"]["recentFrames"] == [{"slotId": "FT8-1", "slotStartMs": 15_000, "message": "NOW A"}]
     assert next_slot["ft8"]["lastDecodeRawMessage"] == "NOW A"
+    assert len(next_slot["ft8"]["_display"]["entries"]) == 2
 
     current_cycle = store.apply({
         "type": "snapshot",
@@ -86,6 +92,10 @@ def test_ft8_decodes_are_scoped_to_current_cycle_frames():
     })
     assert current_cycle["ft8"]["recentDecodeRawMessages"] == ["NOW B", "NOW C"]
     assert current_cycle["ft8"]["lastDecodeRawMessage"] == "NOW C"
+    assert current_cycle["ft8"]["_display"]["entries"][0]["message"] == "00:00:30 UTC · FT8"
+    assert current_cycle["ft8"]["_display"]["slotId"] == "FT8-2"
+    assert current_cycle["ft8"]["_display"]["slotStartMs"] == 30_000
+    assert [entry["message"] for entry in current_cycle["ft8"]["_display"]["entries"][1:]] == ["NOW B", "NOW C"]
 
 
 def test_ft8_empty_frame_batch_keeps_previous_display_when_slot_id_changes():
@@ -95,7 +105,8 @@ def test_ft8_empty_frame_batch_keeps_previous_display_when_slot_id_changes():
         "payload": {
             "ft8": {
                 "recentFramesSlotId": "FT8-1",
-                "recentFrames": [{"slotId": "FT8-1", "message": "OLD"}],
+                "recentFramesSlotStartMs": 0,
+                "recentFrames": [{"slotId": "FT8-1", "slotStartMs": 0, "message": "OLD"}],
             }
         },
     })
@@ -112,9 +123,32 @@ def test_ft8_empty_frame_batch_keeps_previous_display_when_slot_id_changes():
         },
     })
 
-    assert snapshot["ft8"]["recentFrames"] == [{"slotId": "FT8-1", "message": "OLD"}]
+    assert snapshot["ft8"]["recentFrames"] == [{"slotId": "FT8-1", "slotStartMs": 0, "message": "OLD"}]
     assert snapshot["ft8"]["recentDecodeRawMessages"] == ["OLD"]
     assert snapshot["ft8"]["lastDecodeRawMessage"] == "OLD"
+    assert snapshot["ft8"]["_display"]["entries"][0]["slotId"] == "FT8-1"
+    assert snapshot["ft8"]["_display"]["entries"][1]["message"] == "OLD"
+
+
+def test_ft8_empty_first_batch_does_not_create_cycle_header():
+    store = PanelStore()
+    snapshot = store.apply({
+        "type": "snapshot",
+        "payload": {
+            "radio": {"frequency": 7_074_000},
+            "engine": {"running": True, "mode": "ft8", "currentMode": {"name": "FT8"}},
+            "ft8": {
+                "slot": {"id": "FT8-EMPTY", "startMs": 15_000, "mode": "FT8"},
+                "recentFramesSlotId": "FT8-EMPTY",
+                "recentFramesSlotStartMs": 15_000,
+                "recentFrames": [],
+            },
+        },
+    })
+
+    assert snapshot["ft8"]["recentFrames"] == []
+    assert snapshot["ft8"]["recentDecodeRawMessages"] == []
+    assert snapshot["ft8"]["_display"]["entries"] == []
 
 
 def test_ft8_repeated_same_slot_batch_is_deduplicated_and_does_not_reset_anchor():
@@ -128,12 +162,18 @@ def test_ft8_repeated_same_slot_batch_is_deduplicated_and_does_not_reset_anchor(
 
     first = store.apply({
         "type": "snapshot",
-        "payload": {"updatedAt": 0, "ft8": {"recentFramesSlotId": "FT8-1", "recentFrames": frames}},
+        "payload": {
+            "updatedAt": 0,
+            "ft8": {"recentFramesSlotId": "FT8-1", "recentFramesSlotStartMs": 0, "recentFrames": frames},
+        },
     })
     now = 6000
     duplicate = store.apply({
         "type": "snapshot",
-        "payload": {"updatedAt": 6000, "ft8": {"recentFramesSlotId": "FT8-1", "recentFrames": frames}},
+        "payload": {
+            "updatedAt": 6000,
+            "ft8": {"recentFramesSlotId": "FT8-1", "recentFramesSlotStartMs": 0, "recentFrames": frames},
+        },
     })
 
     assert first["ft8"]["recentDecodeRawMessages"] == ["CQ JA1AAA PM95", "CQ VK2XYZ QF56"]
@@ -141,6 +181,8 @@ def test_ft8_repeated_same_slot_batch_is_deduplicated_and_does_not_reset_anchor(
     assert duplicate["ft8"]["recentFrames"][0]["countryZh"] == "日本"
     assert duplicate["ft8"]["recentFrames"][0]["snr"] == -5
     assert duplicate["ft8"]["_display"]["scrollAnchorTimeMs"] == 0
+    assert [entry["message"] for entry in duplicate["ft8"]["_display"]["entries"]].count("CQ JA1AAA PM95") == 1
+    assert sum(1 for entry in duplicate["ft8"]["_display"]["entries"] if entry.get("_kind") == "ft8_cycle_header") == 1
 
 
 def test_ft8_same_slot_new_messages_preserve_scroll_progress():
@@ -151,7 +193,12 @@ def test_ft8_same_slot_new_messages_preserve_scroll_progress():
         "type": "snapshot",
         "payload": {
             "updatedAt": 0,
-            "ft8": {"periodMs": 15_000, "recentFramesSlotId": "FT8-1", "recentFrames": first_frames},
+            "ft8": {
+                "periodMs": 15_000,
+                "recentFramesSlotId": "FT8-1",
+                "recentFramesSlotStartMs": 0,
+                "recentFrames": first_frames,
+            },
         },
     })
 
@@ -163,11 +210,14 @@ def test_ft8_same_slot_new_messages_preserve_scroll_progress():
             "ft8": {
                 "periodMs": 15_000,
                 "recentFramesSlotId": "FT8-1",
+                "recentFramesSlotStartMs": 0,
                 "recentFrames": [*first_frames, {"slotId": "FT8-1", "message": "MSG 10"}],
             },
         },
     })
 
     assert next_snapshot["ft8"]["recentDecodeRawMessages"][-1] == "MSG 10"
+    assert next_snapshot["ft8"]["_display"]["entries"][0]["_kind"] == "ft8_cycle_header"
+    assert next_snapshot["ft8"]["_display"]["entries"][-1]["message"] == "MSG 10"
     assert next_snapshot["ft8"]["_display"]["scrollAnchorIndex"] > 0
     assert next_snapshot["ft8"]["_display"]["scrollAnchorTimeMs"] == 6000

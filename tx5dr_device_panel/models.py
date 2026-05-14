@@ -86,6 +86,31 @@ DEFAULT_SNAPSHOT: Snapshot = {
         "keyerMode": None,
         "keyerSlotId": None,
     },
+    "cw": {
+        "active": False,
+        "decoder": {
+            "enabled": False,
+            "active": False,
+            "state": "disabled",
+            "muted": False,
+            "committedText": "",
+            "pendingText": "",
+            "lastDecodeAt": None,
+            "updatedAt": 0,
+        },
+        "keyer": {
+            "active": False,
+            "mode": None,
+            "messageId": None,
+            "currentText": None,
+            "lastText": None,
+        },
+        "currentTx": {
+            "active": False,
+            "messages": [],
+            "lastMessage": None,
+        },
+    },
     "access": {"localUrl": None, "localUrls": []},
     "network": {
         "connected": False,

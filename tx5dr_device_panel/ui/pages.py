@@ -12,6 +12,9 @@ FT8_COUNTRY_RIGHT_X = 126
 FT8_COUNTRY_WIDTH = 44
 FT8_COUNTRY_GAP = 4
 FT8_FOOTER_Y = 55
+CW_TEXT_X = 2
+CW_ROWS = 4
+CW_ROW_Y = (13, 23, 33, 43)
 VOICE_FREQ_FONT_SIZE = 16
 ACCESS_TITLE_FONT_SIZE = 12
 ACCESS_CAROUSEL_MS = 3000
@@ -79,6 +82,8 @@ def render_snapshot(snapshot: Snapshot, language: str = "zh") -> RenderFrame:
         _render_access(frame, snapshot, language=language)
     elif page == "voice":
         _render_voice(frame, snapshot)
+    elif page == "cw":
+        _render_cw(frame, snapshot, language=language)
     else:
         _render_ft8(frame, snapshot, language=language)
     _ptt_overlay(frame, snapshot)
@@ -92,6 +97,8 @@ def _select_page(snapshot: Snapshot) -> str:
     mode_name = _mode_name(snapshot).upper()
     if engine.get("mode") == "voice" or mode_name in {"VOICE", "SSB", "AM", "FM"}:
         return "voice"
+    if engine.get("mode") == "cw" or mode_name == "CW":
+        return "cw"
     return "ft8"
 
 
@@ -245,14 +252,142 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
     frame.line(0, 53, 127, 53)
     count = _cycle_message_count(ft8)
     count_label = f"{_cycle_utc_compact(ft8)} ×{count}"
-    _render_ft8_footer(
+    _render_tx_footer(
         frame,
         tx_text=str(tx_text),
         tx_armed=_is_tx_armed(snapshot),
         ptt_active=_is_ptt_active(snapshot),
-        count_label=count_label,
+        right_label=count_label,
     )
     _right_text(frame, 126, 55, count_label)
+
+
+def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
+    cw = snapshot.get("cw") if isinstance(snapshot.get("cw"), dict) else {}
+    decoder = cw.get("decoder") if isinstance(cw.get("decoder"), dict) else {}
+    committed = _string_value(decoder.get("committedText"))
+    pending = _string_value(decoder.get("pendingText"))
+    if not decoder.get("enabled"):
+        _render_cw_no_decoder(frame, cw, language)
+        return
+    if committed or pending:
+        _render_cw_transcript(frame, committed, pending)
+
+    frame.line(0, 53, 127, 53)
+    _render_tx_footer(
+        frame,
+        tx_text=_cw_footer_text(cw),
+        tx_armed=bool((cw.get("currentTx") or {}).get("active")),
+        ptt_active=_is_ptt_active(snapshot),
+        right_label="",
+    )
+
+
+def _render_cw_no_decoder(frame: RenderFrame, cw: dict[str, Any], language: str) -> None:
+    text = _cw_sent_text(cw)
+    lines = _wrap_center_lines(text, 116, max_lines=3) if text else _cw_empty_lines(language)
+    total_height = len(lines) * 10 - 2
+    y = max(13, 36 - total_height // 2)
+    for index, line in enumerate(lines):
+        _center_text(frame, y + index * 10, line)
+
+
+def _render_cw_transcript(frame: RenderFrame, committed: str, pending: str) -> None:
+    row, x = _draw_cw_flow(frame, _normalize_cw_text(committed), row=0, x=CW_TEXT_X)
+    pending = _normalize_cw_text(pending)
+    if not pending or row >= CW_ROWS:
+        return
+
+    if x > CW_TEXT_X:
+        x += _text_width(" ")
+        if x > 126:
+            row += 1
+            x = CW_TEXT_X
+    _draw_cw_pending_flow(frame, pending, row=row, x=x)
+
+
+def _draw_cw_flow(frame: RenderFrame, text: str, row: int, x: int) -> tuple[int, int]:
+    while text and row < CW_ROWS:
+        available = 126 - x
+        chunk, text = _take_width(text, available)
+        if not chunk:
+            row += 1
+            x = CW_TEXT_X
+            continue
+        frame.text(x, CW_ROW_Y[row], chunk)
+        x += _text_width(chunk)
+        if text:
+            row += 1
+            x = CW_TEXT_X
+    return row, x
+
+
+def _draw_cw_pending_flow(frame: RenderFrame, text: str, row: int, x: int) -> tuple[int, int]:
+    while text and row < CW_ROWS:
+        available = 126 - x
+        chunk, text = _take_width(text, available)
+        if not chunk:
+            row += 1
+            x = CW_TEXT_X
+            continue
+        width = max(4, _text_width(chunk))
+        y = CW_ROW_Y[row]
+        frame.filled_rect(max(0, x - 1), y, min(127, x + width), min(52, y + 8), fill=1)
+        frame.text(x, y, chunk, fill=0)
+        x += width
+        if text:
+            row += 1
+            x = CW_TEXT_X
+    return row, x
+
+
+def _take_width(text: str, width: int) -> tuple[str, str]:
+    if width <= 0:
+        return "", text
+    result = ""
+    for char in text:
+        if _text_width(result + char) > width:
+            break
+        result += char
+    return result, text[len(result):]
+
+
+def _normalize_cw_text(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _cw_footer_text(cw: dict[str, Any]) -> str:
+    return _cw_sent_text(cw) or "CW MONITOR"
+
+
+def _cw_sent_text(cw: dict[str, Any]) -> str:
+    current_tx = cw.get("currentTx") if isinstance(cw.get("currentTx"), dict) else {}
+    keyer = cw.get("keyer") if isinstance(cw.get("keyer"), dict) else {}
+    return (
+        _string_value(current_tx.get("lastMessage"))
+        or _string_value(keyer.get("currentText"))
+        or _string_value(keyer.get("lastText"))
+    )
+
+
+def _cw_empty_lines(language: str) -> list[str]:
+    if language.lower().startswith("zh"):
+        return ["还未发报", "网页操作发报"]
+    return ["NO TX YET", "SEND FROM WEB"]
+
+
+def _wrap_center_lines(text: str, width: int, max_lines: int) -> list[str]:
+    remaining = _normalize_cw_text(text)
+    lines: list[str] = []
+    while remaining and len(lines) < max_lines:
+        chunk, remaining = _take_width(remaining, width)
+        if not chunk:
+            break
+        if remaining and len(lines) == max_lines - 1:
+            chunk = _clip_width(chunk + remaining, width)
+            remaining = ""
+        lines.append(chunk)
+    return lines or [""]
 
 
 def _render_voice(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -287,15 +422,15 @@ def _is_tx_armed(snapshot: Snapshot) -> bool:
     return bool(((snapshot.get("ft8") or {}).get("currentTx") or {}).get("active"))
 
 
-def _render_ft8_footer(
+def _render_tx_footer(
     frame: RenderFrame,
     tx_text: str,
     tx_armed: bool,
     ptt_active: bool,
-    count_label: str,
+    right_label: str,
 ) -> None:
-    count_width = _text_width(count_label)
-    content_right = 126 - count_width - 4
+    right_width = _text_width(right_label) if right_label else 0
+    content_right = 126 - right_width - (4 if right_label else 0)
     tx_indicator_active = tx_armed or ptt_active
     if not tx_indicator_active:
         frame.text(2, FT8_FOOTER_Y, _clip_width(tx_text, content_right - 2))
@@ -315,6 +450,10 @@ def _mode_name(snapshot: Snapshot) -> str:
     if isinstance(current, dict) and current.get("name"):
         return str(current["name"])
     return str(engine.get("mode") or "")
+
+
+def _string_value(value: Any) -> str:
+    return value.strip() if isinstance(value, str) and value.strip() else ""
 
 
 def _clip(value: str, chars: int) -> str:

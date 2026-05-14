@@ -303,9 +303,88 @@ def test_ft8_country_labels_use_server_fields_and_global_language_parameter():
     assert "Japan" in en_texts
 
 
+def test_cw_mode_routes_to_cw_page_with_status_transcript_pending_highlight_and_footer():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "cw.json").read_text())
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot, language="en")
+    texts = [command.text for command in frame.commands if command.kind == "text"]
+    footer_texts = [command.text for command in frame.commands if command.kind == "text" and command.y == 55]
+
+    assert "CW·7.030" in texts
+    assert "CQ CQ DE BG5DRB K" in texts
+    assert "TEST" in texts
+    assert not any(command.text == "?" for command in frame.commands)
+    assert any(command.text == "TEST" and command.fill == 0 for command in frame.commands)
+    assert any(command.kind == "filled_rect" and command.y in {13, 23, 33, 43} for command in frame.commands)
+    committed = next(command for command in frame.commands if command.kind == "text" and command.text == "CQ CQ DE BG5DRB K")
+    pending = next(command for command in frame.commands if command.kind == "text" and command.text == "TEST")
+    assert pending.x - (committed.x + _test_text_width(committed.text)) >= _test_text_width(" ")
+    assert "CQ CQ DE BG5DRB K" in footer_texts
+
+
+def test_cw_mode_name_routes_to_no_decoder_idle_guidance_without_footer():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "cw_decoder_off.json").read_text())
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    zh_frame = render_snapshot(snapshot, language="zh")
+    en_frame = render_snapshot(snapshot, language="en")
+
+    zh_texts = [command.text for command in zh_frame.commands if command.kind == "text"]
+    en_texts = [command.text for command in en_frame.commands if command.kind == "text"]
+
+    assert "还未发报" in zh_texts
+    assert "网页操作发报" in zh_texts
+    assert "NO TX YET" in en_texts
+    assert "SEND FROM WEB" in en_texts
+    assert "解码器未开启" not in zh_texts
+    assert "CW MONITOR" not in zh_texts
+    assert not any(command.kind == "line" and command.y == 53 for command in zh_frame.commands)
+
+
+def test_cw_decoder_disabled_centers_last_sent_and_ignores_stale_transcript():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "cw.json").read_text())
+    payload["cw"]["decoder"]["enabled"] = False
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot, language="zh")
+    texts = [command.text for command in frame.commands if command.kind == "text"]
+    body_texts = [
+        command.text
+        for command in frame.commands
+        if command.kind == "text" and command.y in {13, 23, 33, 43}
+    ]
+
+    assert "CQ CQ DE BG5DRB K" in texts
+    assert "解码器未开启" not in texts
+    assert "TEST" not in body_texts
+    assert not any(command.kind == "line" and command.y == 53 for command in frame.commands)
+
+
+def test_cw_footer_precedence_and_tx_badge_do_not_trigger_global_ptt_highlight():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "cw.json").read_text())
+    payload["radio"]["ptt"] = False
+    payload["radio"]["tx"] = True
+    payload["cw"]["currentTx"] = {"active": True, "lastMessage": "DE BG5DRB TEST"}
+    payload["cw"]["keyer"] = {"active": True, "currentText": "KEYING NOW", "lastText": "LAST KEY"}
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot)
+
+    rects = [command for command in frame.commands if command.kind == "rect"]
+    footer_texts = [command for command in frame.commands if command.kind == "text" and command.y == 55]
+
+    assert not any((rect.x, rect.y, rect.x2, rect.y2) == (0, 0, 127, 63) for rect in rects)
+    assert not any(command.kind == "filled_rect" and command.y == 0 and command.fill == 1 for command in frame.commands)
+    assert any(command.text == "TX" and command.fill == 0 for command in footer_texts)
+    assert any(command.text == "DE BG5DRB TEST" for command in footer_texts)
+    assert all(command.text != "KEYING NOW" for command in footer_texts)
+
+
 def test_status_bar_component_is_shared_by_access_ft8_and_voice_pages():
     expected_right_labels = {
         "access.json": "TX-5DR",
+        "cw.json": "CW·7.030",
         "ft8.json": "FT8·7.074",
         "voice.json": "FM·145.500",
     }
@@ -372,6 +451,7 @@ def test_status_bar_ignores_ssid_when_transport_is_unknown():
 def test_status_bar_right_text_avoids_network_icon_area():
     expected_right_labels = {
         "access.json": "TX-5DR",
+        "cw.json": "CW·7.030",
         "ft8.json": "FT8·7.074",
         "voice.json": "FM·145.500",
     }

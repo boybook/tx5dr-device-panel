@@ -1,0 +1,26 @@
+{
+  "engine": { "running": true, "mode": "cw", "currentMode": { "name": "CW" }, "state": "running" },
+  "radio": { "connected": true, "frequency": 7030000, "radioMode": "CW", "ptt": false, "tx": false },
+  "cw": {
+    "decoder": {
+      "enabled": true,
+      "active": true,
+      "state": "listening",
+      "muted": false,
+      "committedText": "CQ CQ DE BG5DRB K",
+      "pendingText": "TEST",
+      "lastDecodeAt": 1778697600000,
+      "updatedAt": 1778697600000
+    },
+    "keyer": {
+      "active": false,
+      "mode": "idle",
+      "messageId": null,
+      "currentText": null,
+      "lastText": "CQ CQ DE BG5DRB K"
+    },
+    "currentTx": { "active": false, "messages": [], "lastMessage": null }
+  },
+  "access": { "localUrl": "http://192.168.1.10:8076" },
+  "updatedAt": 1778697600000
+}

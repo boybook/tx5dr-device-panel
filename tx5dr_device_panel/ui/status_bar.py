@@ -98,6 +98,8 @@ def _display_mode(snapshot: Snapshot, page: str) -> str:
         if isinstance(slot, dict) and slot.get("mode"):
             return str(slot["mode"]).upper()
         return _mode_name(snapshot).upper() or "FT8"
+    if page == "cw":
+        return "CW"
     if page == "voice":
         radio = snapshot.get("radio") or {}
         voice = snapshot.get("voice") or {}

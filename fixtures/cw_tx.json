@@ -1,0 +1,26 @@
+{
+  "engine": { "running": true, "mode": "cw", "currentMode": { "name": "CW" }, "state": "running" },
+  "radio": { "connected": true, "frequency": 7030000, "radioMode": "CW", "ptt": true, "tx": true },
+  "cw": {
+    "decoder": {
+      "enabled": true,
+      "active": false,
+      "state": "muted",
+      "muted": true,
+      "committedText": "CQ CQ DE JA1AAA K",
+      "pendingText": "",
+      "lastDecodeAt": 1778697600000,
+      "updatedAt": 1778697600000
+    },
+    "keyer": {
+      "active": true,
+      "mode": "playing",
+      "messageId": null,
+      "currentText": "DE BG5DRB TEST",
+      "lastText": "CQ CQ DE BG5DRB K"
+    },
+    "currentTx": { "active": true, "messages": ["DE BG5DRB TEST"], "lastMessage": "DE BG5DRB TEST" }
+  },
+  "access": { "localUrl": "http://192.168.1.10:8076" },
+  "updatedAt": 1778697600000
+}

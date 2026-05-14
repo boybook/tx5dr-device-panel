@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from tx5dr_device_panel.ft8_display import (
+    FT8_VISIBLE_ROWS,
+    entry_message as _ft8_entry_message,
+    is_own_entry,
+    scroll_start_index,
+)
 from tx5dr_device_panel.models import DISPLAY_HEIGHT, DISPLAY_WIDTH, RenderFrame, Snapshot
 from tx5dr_device_panel.ui.status_bar import format_frequency, render_status_bar
 
@@ -230,7 +236,7 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
     own = _station_callsign(snapshot)
     decodes = _decode_window(_decode_entries(ft8), snapshot, own_callsign=own)
     for idx, entry in enumerate(decodes):
-        y = 13 + idx * 10
+        y = 12 + idx * 10
         message = _entry_message(entry)
         country = _country_label(entry, language)
         country_text = _clip_width(country, FT8_COUNTRY_WIDTH) if country else ""
@@ -490,23 +496,33 @@ def _clip_width(value: str, width: int, font_size: int = 8) -> str:
 def _decode_window(
     messages: list[Any],
     snapshot: Snapshot,
-    rows: int = 4,
+    rows: int = FT8_VISIBLE_ROWS,
     own_callsign: str | None = None,
 ) -> list[Any]:
     values = [message for message in messages if _entry_message(message)]
     if len(values) <= rows:
         return values
-    # Advance one row every two seconds so crowded FT8 slots remain readable.
-    updated_at = snapshot.get("updatedAt")
-    tick = int(updated_at / 2000) if isinstance(updated_at, (int, float)) else 0
-    start = tick % len(values)
-    rotated = values[start:] + values[:start]
-    own = (own_callsign or "").strip().upper()
-    if not own:
-        return rotated[:rows]
-    priority = [message for message in values if own in _entry_message(message).upper()]
-    filler = [message for message in rotated if message not in priority]
-    return (priority + filler)[:rows]
+    own_entries = [message for message in values if is_own_entry(message, own_callsign)]
+    other_entries = [message for message in values if not is_own_entry(message, own_callsign)]
+
+    if len(own_entries) >= rows:
+        start = scroll_start_index(snapshot, len(own_entries), rows)
+        return own_entries[start:start + rows]
+
+    if own_entries:
+        remaining_rows = rows - len(own_entries)
+        return own_entries + _scrolling_slice(other_entries, snapshot, remaining_rows)
+
+    return _scrolling_slice(values, snapshot, rows)
+
+
+def _scrolling_slice(values: list[Any], snapshot: Snapshot, rows: int) -> list[Any]:
+    if rows <= 0:
+        return []
+    if len(values) <= rows:
+        return values[:rows]
+    start = scroll_start_index(snapshot, len(values), rows)
+    return values[start:start + rows]
 
 
 def _decode_entries(ft8: dict[str, Any]) -> list[Any]:
@@ -517,10 +533,7 @@ def _decode_entries(ft8: dict[str, Any]) -> list[Any]:
 
 
 def _entry_message(entry: Any) -> str:
-    if isinstance(entry, dict):
-        message = entry.get("message")
-        return message if isinstance(message, str) else ""
-    return str(entry) if entry is not None else ""
+    return _ft8_entry_message(entry)
 
 
 def _country_label(entry: Any, language: str) -> str:

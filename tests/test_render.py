@@ -269,9 +269,9 @@ def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
     assert sum(
         1
         for command in frame.commands
-        if command.kind == "text" and command.x == 2 and command.y in {13, 23, 33, 43}
+        if command.kind == "text" and command.x == 2 and command.y in {12, 22, 32, 42}
     ) == 4
-    assert any(command.kind == "filled_rect" and command.y in {13, 23, 33, 43} for command in frame.commands)
+    assert any(command.kind == "filled_rect" and command.y in {12, 22, 32, 42} for command in frame.commands)
 
 
 def test_ft8_country_labels_use_server_fields_and_global_language_parameter():
@@ -301,6 +301,73 @@ def test_ft8_country_labels_use_server_fields_and_global_language_parameter():
 
     assert "日本·东京" in zh_texts
     assert "Japan" in en_texts
+
+
+def test_ft8_dynamic_scroll_uses_step_one_for_medium_batches():
+    snapshot = _ft8_scroll_snapshot(6, updated_at=3000)
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert lines == ["MSG 1", "MSG 2", "MSG 3", "MSG 4"]
+
+
+def test_ft8_dynamic_scroll_uses_step_two_for_large_batches():
+    snapshot = _ft8_scroll_snapshot(10, updated_at=4000)
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert lines == ["MSG 4", "MSG 5", "MSG 6", "MSG 7"]
+
+
+def test_ft8_dynamic_scroll_uses_page_step_for_crowded_batches():
+    snapshot = _ft8_scroll_snapshot(20, updated_at=3000)
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert lines == ["MSG 8", "MSG 9", "MSG 10", "MSG 11"]
+
+
+def test_ft8_own_callsign_rows_are_fixed_above_scrolling_traffic():
+    snapshot = _ft8_scroll_snapshot(
+        10,
+        updated_at=6000,
+        messages=[
+            "K1ABC BG5DRB -10",
+            "BG5DRB K1ABC R-12",
+            *[f"MSG {index}" for index in range(8)],
+        ],
+    )
+    frame = render_snapshot(snapshot)
+    lines = _ft8_row_texts(frame)
+
+    assert lines[:2] == ["K1ABC BG5DRB -10", "BG5DRB K1ABC R-12"]
+    assert all("BG5DRB" not in line for line in lines[2:])
+    assert sum(command.kind == "filled_rect" and command.y in {12, 22} for command in frame.commands) >= 2
+
+
+def test_ft8_four_own_callsign_rows_suppress_other_traffic():
+    snapshot = _ft8_scroll_snapshot(
+        10,
+        updated_at=6000,
+        messages=[*[f"BG5DRB K{index}ABC R-12" for index in range(4)], *[f"MSG {index}" for index in range(6)]],
+    )
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert len(lines) == 4
+    assert all("BG5DRB" in line for line in lines)
+
+
+def test_ft8_many_own_callsign_rows_scroll_only_own_traffic():
+    snapshot = _ft8_scroll_snapshot(
+        12,
+        updated_at=6000,
+        messages=[*[f"BG5DRB K{index}ABC R-12" for index in range(6)], *[f"MSG {index}" for index in range(6)]],
+    )
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert lines == [
+        "BG5DRB K2ABC R-12",
+        "BG5DRB K3ABC R-12",
+        "BG5DRB K4ABC R-12",
+        "BG5DRB K5ABC R-12",
+    ]
 
 
 def test_cw_mode_routes_to_cw_page_with_status_transcript_pending_highlight_and_footer():
@@ -519,6 +586,30 @@ def test_voice_monitor_uses_large_centered_status_lines_without_title():
 
 def _test_text_width(text: str) -> int:
     return sum(8 if ord(char) > 127 else 4 for char in text)
+
+
+def _ft8_scroll_snapshot(count: int, updated_at: int, messages=None):
+    store = PanelStore(now_ms=lambda: 0)
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    values = messages if messages is not None else [f"MSG {index}" for index in range(count)]
+    payload["updatedAt"] = updated_at
+    payload["station"] = {"callsign": "BG5DRB"}
+    payload["ft8"]["periodMs"] = 15_000
+    payload["ft8"]["recentFramesSlotId"] = "FT8-SCROLL"
+    payload["ft8"]["recentFramesSlotStartMs"] = 0
+    payload["ft8"]["recentFrames"] = [
+        {"slotId": "FT8-SCROLL", "slotStartMs": 0, "message": message}
+        for message in values
+    ]
+    return store.apply({"type": "snapshot", "payload": payload})
+
+
+def _ft8_row_texts(frame):
+    return [
+        command.text
+        for command in frame.commands
+        if command.kind == "text" and command.x == 2 and command.y in {12, 22, 32, 42}
+    ]
 
 
 def _has_pixel(commands, x: int, y: int, fill: int = 1) -> bool:

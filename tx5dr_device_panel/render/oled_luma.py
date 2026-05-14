@@ -21,6 +21,7 @@ class OledLumaBackend:
         self._last_image: Image.Image | None = None
         self._pending_image: Image.Image | None = None
         self._pending_tx_active = False
+        self._pending_animated = False
         self._last_flush = 0.0
 
     def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
@@ -29,6 +30,7 @@ class OledLumaBackend:
         if now - self._last_flush < 1.0 / fps:
             self._pending_image = image.copy()
             self._pending_tx_active = tx_active
+            self._pending_animated = animated
             return False
         return self.flush(image, tx_active)
 
@@ -37,9 +39,11 @@ class OledLumaBackend:
             return False
         image = self._pending_image
         tx_active = self._pending_tx_active
+        animated = self._pending_animated
         self._pending_image = None
         self._pending_tx_active = False
-        return self.flush(image, tx_active)
+        self._pending_animated = False
+        return self.display(image, tx_active=tx_active, animated=animated)
 
     def flush(self, image: Image.Image, tx_active: bool = False) -> bool:
         if self._last_image is not None and image.tobytes() == self._last_image.tobytes():

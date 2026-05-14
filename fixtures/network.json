@@ -1,6 +1,6 @@
 {
   "engine": { "running": false, "mode": null, "currentMode": null, "state": "stopped" },
   "access": { "localUrl": "http://10.42.0.1:8076" },
-  "network": { "connected": true, "interface": "wlan0", "ip": "10.42.0.1", "ssid": "TX5DR", "hotspot": true },
+  "network": { "connected": true, "interface": "wlan0", "ip": "10.42.0.1", "ssid": "TX5DR", "hotspot": true, "transport": "wifi" },
   "updatedAt": 1778697600000
 }

@@ -143,7 +143,12 @@ def _network_state(snapshot: Snapshot) -> str:
     network = snapshot.get("network")
     if not isinstance(network, dict) or not network.get("connected") or not network.get("ip"):
         return "wifi_off"
-    return "wifi" if network.get("ssid") else "wired"
+    transport = network.get("transport")
+    if transport == "wifi":
+        return "wifi"
+    if transport == "wired":
+        return "wired"
+    return "wifi_off"
 
 
 def _wifi_connected_icon(frame: RenderFrame, fill: int) -> None:

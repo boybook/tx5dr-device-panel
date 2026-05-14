@@ -14,8 +14,10 @@ Python MVP for a read-only TX-5DR `128x64` OLED status panel.
 - Has a global UI `language` setting (`zh`/`en`) that is shared by current and future labels.
 - Supports deterministic PNG snapshots, pygame preview, and luma.oled hardware output.
 - Supports SSD1306/SH1106 over I2C or SPI by configuration.
+- Provides a Linux NetworkManager control interface for future user-initiated Wi-Fi/hotspot
+  actions; current OLED UI remains display-only.
 
-No pairing code, login flow, network mutation, or panel-side control action exists in this MVP.
+No pairing code, login flow, or panel-side control action exists in this MVP.
 
 ## Quick Start
 
@@ -24,6 +26,12 @@ uv venv
 uv pip install -e ".[dev]"
 tx5dr-device-panel snapshot --fixture fixtures/ft8.json --output out/ft8.png
 tx5dr-device-panel --language zh preview --fixture fixtures/access.json
+```
+
+Linux images that enable future NetworkManager control should install:
+
+```bash
+uv pip install -e ".[network-control]"
 ```
 
 ## Configuration

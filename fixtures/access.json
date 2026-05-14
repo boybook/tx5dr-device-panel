@@ -2,6 +2,6 @@
   "engine": { "running": false, "mode": null, "currentMode": null, "state": "stopped" },
   "radio": { "connected": false, "frequency": null, "radioMode": null, "ptt": false, "tx": false },
   "access": { "localUrl": "http://192.168.1.10:8076" },
-  "network": { "connected": true, "interface": "eth0", "ip": "192.168.1.10", "ssid": null, "hotspot": false },
+  "network": { "connected": true, "interface": "eth0", "ip": "192.168.1.10", "ssid": null, "hotspot": false, "transport": "wired" },
   "updatedAt": 1778697600000
 }

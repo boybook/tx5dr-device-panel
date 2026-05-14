@@ -23,6 +23,9 @@ dependencies = [
 dev = [
   "pytest>=8",
 ]
+network-control = [
+  "dbus-next>=0.2",
+]
 
 [project.scripts]
 tx5dr-device-panel = "tx5dr_device_panel.cli:main"

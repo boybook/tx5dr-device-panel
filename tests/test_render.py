@@ -261,7 +261,18 @@ def test_status_bar_component_is_shared_by_access_ft8_and_voice_pages():
 
 
 def test_status_bar_draws_network_icons_for_wifi_wired_and_disconnected_states():
-    wifi = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "network.json").read_text())})
+    wifi = PanelStore().apply({
+        "type": "snapshot",
+        "payload": {
+            "network": {
+                "connected": True,
+                "interface": "en0",
+                "ip": "192.168.1.20",
+                "ssid": None,
+                "transport": "wifi",
+            }
+        },
+    })
     wired = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "access.json").read_text())})
     offline = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "boot.json").read_text())})
 
@@ -276,6 +287,24 @@ def test_status_bar_draws_network_icons_for_wifi_wired_and_disconnected_states()
     assert _has_pixel(wired_commands, 124, 4)
     assert _has_pixel(offline_commands, 119, 1)
     assert _has_pixel(offline_commands, 126, 8)
+
+
+def test_status_bar_ignores_ssid_when_transport_is_unknown():
+    snapshot = PanelStore().apply({
+        "type": "snapshot",
+        "payload": {
+            "network": {
+                "connected": True,
+                "ip": "192.168.1.20",
+                "ssid": "Lab",
+                "transport": "unknown",
+            }
+        },
+    })
+    commands = render_snapshot(snapshot).commands
+
+    assert _has_pixel(commands, 119, 1)
+    assert _has_pixel(commands, 126, 8)
 
 
 def test_status_bar_right_text_avoids_network_icon_area():

@@ -87,6 +87,15 @@ DEFAULT_SNAPSHOT: Snapshot = {
         "keyerSlotId": None,
     },
     "access": {"localUrl": None},
-    "network": {"connected": False, "interface": None, "ip": None, "ssid": None, "hotspot": False},
+    "network": {
+        "connected": False,
+        "interface": None,
+        "ip": None,
+        "ssid": None,
+        "hotspot": False,
+        "transport": "unknown",
+        "source": "default",
+        "details": {},
+    },
     "updatedAt": 0,
 }

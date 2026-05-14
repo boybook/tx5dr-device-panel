@@ -1,6 +1,6 @@
 {
   "engine": { "running": false, "mode": null, "currentMode": null, "state": "error" },
   "radio": { "connected": false, "frequency": null, "radioMode": null, "ptt": false, "tx": false },
-  "access": { "localUrl": "http://tx5dr.local:8076" },
+  "access": { "localUrl": null },
   "updatedAt": 1778697600000
 }

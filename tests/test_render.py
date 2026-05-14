@@ -140,8 +140,20 @@ def test_access_page_shows_server_down_when_network_is_available():
     texts = [command.text for command in render_snapshot(snapshot, language="en").commands if command.kind == "text"]
 
     assert "SERVER OFF" in texts
-    assert "CHECK TX-5DR SVC" in texts
-    assert "192.168.1.10:8076" in texts
+    assert "LOGIN CONSOLE" in texts
+    assert "RUN tx5dr doctor" in texts
+    assert "192.168.1.10:8076" not in texts
+
+
+def test_access_page_does_not_fallback_to_local_domain_without_server_url():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "access.json").read_text())
+    payload["access"]["localUrl"] = None
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    texts = [command.text for command in render_snapshot(snapshot, language="zh").commands if command.kind == "text"]
+
+    assert "后台不可用" in texts
+    assert all("tx5dr.local" not in str(text) for text in texts)
 
 
 def test_access_page_guides_hotspot_join_when_hotspot_ssid_is_available():

@@ -35,6 +35,8 @@ ACCESS_TEXT = {
         "connect_network": "连接网线/WiFi",
         "join_ssid": "连接{ssid}",
         "check_server": "检查TX-5DR服务",
+        "console": "登录控制台诊断",
+        "doctor": "控制台运行 tx5dr doctor",
         "open_web": "打开后台启动",
         "ip": "IP {ip}",
         "ssid": "SSID {ssid}",
@@ -48,6 +50,8 @@ ACCESS_TEXT = {
         "connect_network": "JOIN LAN/WIFI",
         "join_ssid": "JOIN {ssid}",
         "check_server": "CHECK TX-5DR SVC",
+        "console": "LOGIN CONSOLE",
+        "doctor": "RUN tx5dr doctor",
         "open_web": "OPEN WEB UI",
         "ip": "IP {ip}",
         "ssid": "SSID {ssid}",
@@ -162,20 +166,20 @@ def _access_view(snapshot: Snapshot, language: str) -> AccessView:
     if last_error:
         return AccessView(
             title=text["server_down"],
-            messages=[text["check_server"], network_line],
-            endpoint=url,
+            messages=[text["console"]],
+            endpoint=text["doctor"],
             alert=True,
         )
     if not engine.get("running"):
         return AccessView(
             title=text["engine_stopped"],
             messages=[_access_next_step(text, network), network_line],
-            endpoint=url,
+            endpoint=url or text["url_wait"],
         )
     return AccessView(
         title=text["open_web"],
         messages=[_access_next_step(text, network), network_line],
-        endpoint=url,
+        endpoint=url or text["url_wait"],
     )
 
 
@@ -198,7 +202,7 @@ def _network_hint(text: dict[str, str], network: dict[str, Any]) -> str:
 def _access_url(access: dict[str, Any]) -> str:
     url = access.get("localUrl")
     if not isinstance(url, str) or not url.strip():
-        url = "http://tx5dr.local:8076"
+        return ""
     return url.replace("http://", "").replace("https://", "").rstrip("/")
 
 

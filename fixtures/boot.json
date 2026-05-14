@@ -1,6 +1,6 @@
 {
   "engine": { "running": false, "mode": null, "currentMode": null, "state": "booting" },
-  "access": { "localUrl": "http://tx5dr.local:8076" },
+  "access": { "localUrl": null },
   "network": { "connected": false, "interface": null, "ip": null, "ssid": null, "hotspot": false, "transport": "unknown" },
   "updatedAt": 1778697600000
 }

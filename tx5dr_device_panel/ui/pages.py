@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from tx5dr_device_panel.models import DISPLAY_HEIGHT, DISPLAY_WIDTH, RenderFrame, Snapshot
@@ -12,6 +13,19 @@ FT8_COUNTRY_WIDTH = 44
 FT8_COUNTRY_GAP = 4
 FT8_FOOTER_Y = 55
 VOICE_FREQ_FONT_SIZE = 16
+ACCESS_TITLE_FONT_SIZE = 12
+ACCESS_CAROUSEL_MS = 3000
+ACCESS_PARTICLE_STEP_MS = 250
+ACCESS_PARTICLES = (
+    ("dot", 7, 16, 1, 1),
+    ("bubble", 19, 53, 2, -1),
+    ("x", 34, 18, 1, 2),
+    ("dot", 48, 59, 3, -1),
+    ("bubble", 79, 15, 2, 2),
+    ("x", 93, 51, 1, -1),
+    ("dot", 112, 21, 3, 2),
+    ("bubble", 121, 58, 1, -1),
+)
 
 ACCESS_TEXT = {
     "zh": {
@@ -43,6 +57,14 @@ ACCESS_TEXT = {
 }
 
 
+@dataclass(frozen=True)
+class AccessView:
+    title: str
+    messages: list[str]
+    endpoint: str
+    alert: bool = False
+
+
 def render_snapshot(snapshot: Snapshot, language: str = "zh") -> RenderFrame:
     frame = RenderFrame(DISPLAY_WIDTH, DISPLAY_HEIGHT)
     page = _select_page(snapshot)
@@ -68,19 +90,55 @@ def _select_page(snapshot: Snapshot) -> str:
 
 
 def _render_access(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
-    for y, text in zip((13, 25, 37, 49), _access_lines(snapshot, language), strict=True):
-        frame.text(2, y, _clip_width(text, 124))
-    _access_border(frame)
+    view = _access_view(snapshot, language)
+    _access_particles(frame, snapshot)
+    _access_title(frame, view.title)
+    _center_text(frame, 43, _clip_width(_access_carousel_message(view.messages, snapshot), 116))
+    _center_text(frame, 55, _clip_width(view.endpoint, 124))
 
 
-def _access_border(frame: RenderFrame) -> None:
-    # Reuse the status-bar divider as the top edge to avoid a visually doubled line.
-    frame.line(0, 10, 0, 63)
-    frame.line(127, 10, 127, 63)
-    frame.line(0, 63, 127, 63)
+def _access_title(frame: RenderFrame, title: str) -> None:
+    text = _clip_width(title, 116, font_size=ACCESS_TITLE_FONT_SIZE)
+    text_width = _text_width(text, font_size=ACCESS_TITLE_FONT_SIZE)
+    x = max(2, (DISPLAY_WIDTH - text_width) // 2)
+    frame.filled_rect(max(0, x - 3), 18, min(127, x + text_width + 2), 31, fill=1)
+    frame.text(x, 19, text, fill=0, font_size=ACCESS_TITLE_FONT_SIZE)
 
 
-def _access_lines(snapshot: Snapshot, language: str) -> list[str]:
+def _access_particles(frame: RenderFrame, snapshot: Snapshot) -> None:
+    updated_at = snapshot.get("updatedAt")
+    tick = int(updated_at / ACCESS_PARTICLE_STEP_MS) if isinstance(updated_at, (int, float)) else 0
+    for index, (kind, base_x, base_y, speed_x, speed_y) in enumerate(ACCESS_PARTICLES):
+        x = 3 + ((base_x + tick * speed_x + index * 11) % 121)
+        y = 12 + ((base_y + tick * speed_y + index * 7) % 48)
+        _access_particle(frame, kind, x, y, pulse=(index + tick) % 4 == 0)
+
+
+def _access_particle(frame: RenderFrame, kind: str, x: int, y: int, pulse: bool) -> None:
+    if kind == "bubble":
+        radius = 2 if pulse else 1
+        frame.rect(max(1, x - radius), max(11, y - radius), min(126, x + radius), min(62, y + radius))
+        return
+    if kind == "x":
+        frame.line(max(1, x - 1), max(11, y - 1), min(126, x + 1), min(62, y + 1))
+        frame.line(min(126, x + 1), max(11, y - 1), max(1, x - 1), min(62, y + 1))
+        return
+    if pulse and x > 1:
+        frame.line(x - 1, y, x, y)
+    else:
+        frame.filled_rect(x, y, x, y)
+
+
+def _access_carousel_message(messages: list[str], snapshot: Snapshot) -> str:
+    values = [message for message in messages if message]
+    if not values:
+        return ""
+    updated_at = snapshot.get("updatedAt")
+    tick = int(updated_at / ACCESS_CAROUSEL_MS) if isinstance(updated_at, (int, float)) else 0
+    return values[tick % len(values)]
+
+
+def _access_view(snapshot: Snapshot, language: str) -> AccessView:
     text = _access_text(language)
     network = snapshot.get("network") if isinstance(snapshot.get("network"), dict) else {}
     access = snapshot.get("access") if isinstance(snapshot.get("access"), dict) else {}
@@ -91,20 +149,34 @@ def _access_lines(snapshot: Snapshot, language: str) -> list[str]:
     last_error = access.get("lastError")
 
     if not has_network:
-        return [
-            text["no_network"],
-            _network_hint(text, network),
-            text["ssid"].format(ssid=ssid) if ssid else text["no_ip"],
-            text["url_wait"],
-        ]
+        network_line = text["ssid"].format(ssid=ssid) if ssid else text["no_ip"]
+        return AccessView(
+            title=text["no_network"],
+            messages=[_network_hint(text, network), network_line],
+            endpoint=network_line,
+            alert=True,
+        )
 
     network_line = text["ssid"].format(ssid=ssid) if ssid else text["ip"].format(ip=ip)
     url = _access_url(access)
     if last_error:
-        return [text["server_down"], text["check_server"], network_line, url]
+        return AccessView(
+            title=text["server_down"],
+            messages=[text["check_server"], network_line],
+            endpoint=url,
+            alert=True,
+        )
     if not engine.get("running"):
-        return [text["engine_stopped"], _access_next_step(text, network), network_line, url]
-    return [text["open_web"], _access_next_step(text, network), network_line, url]
+        return AccessView(
+            title=text["engine_stopped"],
+            messages=[_access_next_step(text, network), network_line],
+            endpoint=url,
+        )
+    return AccessView(
+        title=text["open_web"],
+        messages=[_access_next_step(text, network), network_line],
+        endpoint=url,
+    )
 
 
 def _access_text(language: str) -> dict[str, str]:

@@ -14,6 +14,7 @@ class OledLumaBackend:
     config: HardwareConfig
     max_normal_fps: float = 1.0
     max_tx_fps: float = 2.0
+    max_animation_fps: float = 4.0
 
     def __post_init__(self) -> None:
         self.device = self._create_device()
@@ -22,9 +23,9 @@ class OledLumaBackend:
         self._pending_tx_active = False
         self._last_flush = 0.0
 
-    def display(self, image: Image.Image, tx_active: bool = False) -> bool:
+    def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         now = time.monotonic()
-        fps = self.max_tx_fps if tx_active else self.max_normal_fps
+        fps = self.max_tx_fps if tx_active else self.max_animation_fps if animated else self.max_normal_fps
         if now - self._last_flush < 1.0 / fps:
             self._pending_image = image.copy()
             self._pending_tx_active = tx_active

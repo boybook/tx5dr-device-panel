@@ -18,6 +18,7 @@ def test_sh1106_spi_config_keeps_column_offset_and_throttle_defaults():
     assert config.sh1106_column_offset == 2
     assert OledLumaBackend.max_normal_fps == 1.0
     assert OledLumaBackend.max_tx_fps == 2.0
+    assert OledLumaBackend.max_animation_fps == 4.0
 
 
 def test_oled_throttle_keeps_pending_last_frame():
@@ -25,6 +26,7 @@ def test_oled_throttle_keeps_pending_last_frame():
     backend.config = HardwareConfig()
     backend.max_normal_fps = 1.0
     backend.max_tx_fps = 2.0
+    backend.max_animation_fps = 4.0
     backend.device = FakeDevice()
     backend._last_image = None
     backend._pending_image = None

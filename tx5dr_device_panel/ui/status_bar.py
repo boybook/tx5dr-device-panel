@@ -84,7 +84,7 @@ def format_frequency(value: Any) -> str:
 
 def _right_label(snapshot: Snapshot, page: str) -> str:
     if page == "access":
-        return "ACCESS"
+        return "TX-5DR"
     radio = snapshot.get("radio") or {}
     mode = _display_mode(snapshot, page)
     frequency = format_frequency(radio.get("frequency"))

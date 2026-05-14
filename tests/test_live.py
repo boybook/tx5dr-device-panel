@@ -13,7 +13,8 @@ def test_live_render_injects_last_error_without_persisting_it(monkeypatch):
     captured = {}
 
     class Sink:
-        def display(self, image, tx_active=False):
+        def display(self, image, tx_active=False, animated=False):
+            captured["animated"] = animated
             return True
 
         def flush_pending(self):
@@ -35,6 +36,7 @@ def test_live_render_injects_last_error_without_persisting_it(monkeypatch):
     runner._render_current(force_network=True)
 
     assert captured["language"] == "en"
+    assert captured["animated"] is True
     assert captured["snapshot"]["access"]["lastError"] == "server down"
     assert "lastError" not in runner.store.snapshot["access"]
 

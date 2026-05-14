@@ -19,7 +19,7 @@ from tx5dr_device_panel.ui import render_snapshot
 
 
 class ImageSink(Protocol):
-    def display(self, image: Image.Image, tx_active: bool = False) -> bool:
+    def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         ...
 
     def flush_pending(self) -> bool:
@@ -30,7 +30,7 @@ class PngSink:
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    def display(self, image: Image.Image, tx_active: bool = False) -> bool:
+    def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         image.save(self.path)
         return True
@@ -50,7 +50,7 @@ class PygamePreviewSink:
         pygame.display.set_caption("TX-5DR Device Panel Live Preview")
         self.clock = pygame.time.Clock()
 
-    def display(self, image: Image.Image, tx_active: bool = False) -> bool:
+    def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         self._handle_events()
         image = image.convert("RGB").resize((128 * self.scale, 64 * self.scale), Image.Resampling.NEAREST)
         frame = self.pygame.image.frombuffer(
@@ -120,7 +120,7 @@ class LivePanelRunner:
             if flush_pending:
                 flush_pending()
             current_second = int(time.time())
-            if current_second != self._last_rendered_second:
+            if self._is_access_page(self.store.snapshot) or current_second != self._last_rendered_second:
                 self._render_current(update_clock=True)
 
     def _render_current(self, update_clock: bool = False, force_network: bool = False) -> None:
@@ -137,8 +137,16 @@ class LivePanelRunner:
         image = self.renderer.render(
             render_snapshot(snapshot, language=self.config.language)
         )
-        self.sink.display(image, tx_active=_is_ptt_active(snapshot))
+        self.sink.display(
+            image,
+            tx_active=_is_ptt_active(snapshot),
+            animated=self._is_access_page(snapshot),
+        )
         self._last_rendered_second = int(time.time())
+
+    def _is_access_page(self, snapshot: dict) -> bool:
+        engine = snapshot.get("engine") or {}
+        return not bool(engine.get("running"))
 
 
 def _is_ptt_active(snapshot: dict) -> bool:

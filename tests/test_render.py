@@ -89,6 +89,7 @@ def test_renderer_uses_bundled_fusion_pixel_font_and_supports_chinese_text():
 
     assert renderer.font_path.endswith("fusion-pixel-8px-monospaced-zh_hans.ttf")
     assert renderer.font.getbbox("中文状态")[2] > 0
+    assert renderer._font_for_size(12).path.endswith("fusion-pixel-12px-monospaced-zh_hans.ttf")
     frame = render_snapshot(
         {
             "engine": {"running": False},
@@ -108,6 +109,8 @@ def test_access_page_uses_localized_engine_stopped_guidance():
     zh_texts = [command.text for command in render_snapshot(snapshot, language="zh").commands if command.kind == "text"]
     en_texts = [command.text for command in render_snapshot(snapshot, language="en").commands if command.kind == "text"]
 
+    assert "TX-5DR" in zh_texts
+    assert "TX-5DR" in en_texts
     assert "引擎未启动" in zh_texts
     assert "打开后台启动" in zh_texts
     assert "192.168.1.10:8076" in zh_texts
@@ -138,7 +141,7 @@ def test_access_page_shows_server_down_when_network_is_available():
 
     assert "SERVER OFF" in texts
     assert "CHECK TX-5DR SVC" in texts
-    assert "IP 192.168.1.10" in texts
+    assert "192.168.1.10:8076" in texts
 
 
 def test_access_page_guides_hotspot_join_when_hotspot_ssid_is_available():
@@ -148,11 +151,42 @@ def test_access_page_guides_hotspot_join_when_hotspot_ssid_is_available():
 
     assert "ENGINE STOPPED" in texts
     assert "JOIN TX5DR" in texts
-    assert "SSID TX5DR" in texts
     assert "10.42.0.1:8076" in texts
 
 
-def test_access_border_reuses_status_bar_divider_without_double_top_line():
+def test_access_page_carousel_rotates_network_detail_deterministically():
+    payload = json.loads((FIXTURES / "network.json").read_text())
+    payload["updatedAt"] = 0
+    first = PanelStore().apply({"type": "snapshot", "payload": payload})
+    payload["updatedAt"] = 3000
+    second = PanelStore().apply({"type": "snapshot", "payload": payload})
+
+    first_frame = render_snapshot(first, language="en")
+    first_again = render_snapshot(first, language="en")
+    second_texts = [command.text for command in render_snapshot(second, language="en").commands if command.kind == "text"]
+
+    assert first_frame.commands == first_again.commands
+    assert "SSID TX5DR" not in [command.text for command in first_frame.commands if command.kind == "text"]
+    assert "SSID TX5DR" in second_texts
+
+
+def test_access_page_uses_minimal_centered_title_and_particle_field():
+    snapshot = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "access.json").read_text())})
+    frame = render_snapshot(snapshot, language="zh")
+    text_commands = {command.text: command for command in frame.commands if command.kind == "text"}
+
+    assert "TX-5DR" in text_commands
+    assert "ACCESS" not in text_commands
+    assert text_commands["引擎未启动"].font_size == 12
+    assert text_commands["引擎未启动"].fill == 0
+    assert text_commands["引擎未启动"].y == 19
+    assert any(command.kind == "filled_rect" and command.y == 18 and command.y2 == 31 for command in frame.commands)
+    assert not any(command.kind == "filled_rect" and command.y == 55 and command.x2 and command.x2 - command.x > 8 for command in frame.commands)
+    assert not any(command.kind == "rect" and command.y == 23 and command.y2 == 40 for command in frame.commands)
+    assert sum(1 for command in frame.commands if command.kind in {"filled_rect", "rect", "line"} and command.y >= 11) >= 8
+
+
+def test_access_page_has_no_full_content_border():
     store = PanelStore()
     snapshot = store.apply({"type": "snapshot", "payload": json.loads((FIXTURES / "access.json").read_text())})
     frame = render_snapshot(snapshot)
@@ -162,9 +196,9 @@ def test_access_border_reuses_status_bar_divider_without_double_top_line():
         for command in frame.commands
     )
     assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 9, 127, 9) for command in frame.commands)
-    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 10, 0, 63) for command in frame.commands)
-    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (127, 10, 127, 63) for command in frame.commands)
-    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 63, 127, 63) for command in frame.commands)
+    assert not any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 10, 0, 63) for command in frame.commands)
+    assert not any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (127, 10, 127, 63) for command in frame.commands)
+    assert not any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 63, 127, 63) for command in frame.commands)
 
 
 def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
@@ -243,7 +277,7 @@ def test_ft8_country_labels_use_server_fields_and_global_language_parameter():
 
 def test_status_bar_component_is_shared_by_access_ft8_and_voice_pages():
     expected_right_labels = {
-        "access.json": "ACCESS",
+        "access.json": "TX-5DR",
         "ft8.json": "FT8·7.074",
         "voice.json": "FM·145.500",
     }
@@ -309,7 +343,7 @@ def test_status_bar_ignores_ssid_when_transport_is_unknown():
 
 def test_status_bar_right_text_avoids_network_icon_area():
     expected_right_labels = {
-        "access.json": "ACCESS",
+        "access.json": "TX-5DR",
         "ft8.json": "FT8·7.074",
         "voice.json": "FM·145.500",
     }

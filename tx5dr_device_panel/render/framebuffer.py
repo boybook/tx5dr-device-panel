@@ -15,13 +15,25 @@ DEFAULT_FUSION_PIXEL_FONT_PATH = str(
     / "fusion-pixel-font"
     / "fusion-pixel-8px-monospaced-zh_hans.ttf"
 )
+DEFAULT_FUSION_PIXEL_12PX_FONT_PATH = str(
+    Path(__file__).resolve().parents[1]
+    / "assets"
+    / "fonts"
+    / "fusion-pixel-font"
+    / "fusion-pixel-12px-monospaced-zh_hans.ttf"
+)
 DEFAULT_FUSION_PIXEL_FONT_SIZE = 8
+BUNDLED_FUSION_PIXEL_FONT_PATHS = {
+    8: DEFAULT_FUSION_PIXEL_FONT_PATH,
+    12: DEFAULT_FUSION_PIXEL_12PX_FONT_PATH,
+}
 
 
 class FramebufferRenderer:
     def __init__(self, font_path: str | None = None, font_size: int = DEFAULT_FUSION_PIXEL_FONT_SIZE) -> None:
         self.font_path = font_path or os.getenv("TX5DR_PANEL_FONT_PATH") or DEFAULT_FUSION_PIXEL_FONT_PATH
         self.font_size = font_size
+        self._use_bundled_variants = Path(self.font_path).expanduser() == Path(DEFAULT_FUSION_PIXEL_FONT_PATH)
         self.font = self._load_font()
         self._font_cache: dict[int, ImageFont.FreeTypeFont] = {self.font_size: self.font}
 
@@ -79,5 +91,12 @@ class FramebufferRenderer:
     def _font_for_size(self, font_size: int | None) -> ImageFont.FreeTypeFont:
         size = font_size or self.font_size
         if size not in self._font_cache:
-            self._font_cache[size] = ImageFont.truetype(str(Path(self.font_path).expanduser()), size=size)
+            self._font_cache[size] = ImageFont.truetype(str(self._font_path_for_size(size)), size=size)
         return self._font_cache[size]
+
+    def _font_path_for_size(self, size: int) -> Path:
+        if self._use_bundled_variants:
+            path = Path(BUNDLED_FUSION_PIXEL_FONT_PATHS.get(size, self.font_path)).expanduser()
+            if path.exists():
+                return path
+        return Path(self.font_path).expanduser()

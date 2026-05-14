@@ -345,7 +345,8 @@ def test_cw_mode_name_routes_to_no_decoder_idle_guidance_without_footer():
 def test_cw_decoder_disabled_centers_last_sent_and_ignores_stale_transcript():
     store = PanelStore()
     payload = json.loads((FIXTURES / "cw.json").read_text())
-    payload["cw"]["decoder"]["enabled"] = False
+    payload["cw"]["decoder"]["enabled"] = True
+    payload["cw"]["decoder"]["state"] = "disabled"
     snapshot = store.apply({"type": "snapshot", "payload": payload})
     frame = render_snapshot(snapshot, language="zh")
     texts = [command.text for command in frame.commands if command.kind == "text"]
@@ -357,6 +358,7 @@ def test_cw_decoder_disabled_centers_last_sent_and_ignores_stale_transcript():
 
     assert "CQ CQ DE BG5DRB K" in texts
     assert "解码器未开启" not in texts
+    assert "等待解码结果..." not in texts
     assert "TEST" not in body_texts
     assert not any(command.kind == "line" and command.y == 53 for command in frame.commands)
 
@@ -374,6 +376,8 @@ def test_cw_decoder_enabled_empty_state_waits_for_decodes_in_global_language():
 
     assert "等待解码结果..." in zh_texts
     assert "WAITING DECODES..." in en_texts
+    waiting = next(command for command in zh_frame.commands if command.kind == "text" and command.text == "等待解码结果...")
+    assert (waiting.x, waiting.y) == (2, 13)
     assert any(command.kind == "line" and command.y == 53 for command in zh_frame.commands)
 
 

@@ -15,6 +15,7 @@ FT8_FOOTER_Y = 55
 CW_TEXT_X = 2
 CW_ROWS = 4
 CW_ROW_Y = (13, 23, 33, 43)
+CW_DECODER_OFF_STATES = {"disabled", "stopped", "stopping", "idle", "off", "unavailable"}
 VOICE_FREQ_FONT_SIZE = 16
 ACCESS_TITLE_FONT_SIZE = 12
 ACCESS_CAROUSEL_MS = 3000
@@ -267,13 +268,13 @@ def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
     decoder = cw.get("decoder") if isinstance(cw.get("decoder"), dict) else {}
     committed = _string_value(decoder.get("committedText"))
     pending = _string_value(decoder.get("pendingText"))
-    if not decoder.get("enabled"):
+    if not _cw_decoder_enabled(decoder):
         _render_cw_no_decoder(frame, cw, language)
         return
     if committed or pending:
         _render_cw_transcript(frame, committed, pending)
     else:
-        _center_text(frame, 31, _cw_waiting_decode_text(language))
+        frame.text(CW_TEXT_X, CW_ROW_Y[0], _clip_width(_cw_waiting_decode_text(language), 124))
 
     frame.line(0, 53, 127, 53)
     _render_tx_footer(
@@ -292,6 +293,13 @@ def _render_cw_no_decoder(frame: RenderFrame, cw: dict[str, Any], language: str)
     y = max(13, 36 - total_height // 2)
     for index, line in enumerate(lines):
         _center_text(frame, y + index * 10, line)
+
+
+def _cw_decoder_enabled(decoder: dict[str, Any]) -> bool:
+    state = _string_value(decoder.get("state")).lower()
+    if state in CW_DECODER_OFF_STATES:
+        return False
+    return bool(decoder.get("enabled"))
 
 
 def _render_cw_transcript(frame: RenderFrame, committed: str, pending: str) -> None:

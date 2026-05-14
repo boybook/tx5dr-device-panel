@@ -5,9 +5,11 @@ from tx5dr_device_panel.models import DISPLAY_HEIGHT, DISPLAY_WIDTH
 from tx5dr_device_panel.render.framebuffer import FramebufferRenderer
 from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
+from tx5dr_device_panel.ui.text_metrics import TextMetrics
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+TEST_METRICS = TextMetrics()
 
 
 def test_all_fixtures_render_within_command_bounds():
@@ -100,6 +102,18 @@ def test_renderer_uses_bundled_fusion_pixel_font_and_supports_chinese_text():
     )
     image = renderer.render(frame)
     assert image.getbbox() is not None
+
+
+def test_text_metrics_use_real_fusion_pixel_font_advance_for_symbols():
+    metrics = TextMetrics()
+
+    assert metrics.text_width("·") == 4
+    assert metrics.text_width("×") == 4
+    assert metrics.text_width("中") == 8
+    assert metrics.text_width("A") == 4
+    assert metrics.text_width("FT8·21.074") == 40
+    assert metrics.text_width("031945 ×10") == 40
+    assert metrics.text_width("00:00:00 UTC · 40m · FT8") == 96
 
 
 def test_access_page_uses_localized_engine_stopped_guidance():
@@ -605,7 +619,7 @@ def test_voice_monitor_uses_large_centered_status_lines_without_title():
 
 
 def _test_text_width(text: str) -> int:
-    return sum(8 if ord(char) > 127 else 4 for char in text)
+    return TEST_METRICS.text_width(text)
 
 
 def _ft8_scroll_snapshot(count: int, updated_at: int, messages=None):

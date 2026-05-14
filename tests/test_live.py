@@ -25,7 +25,7 @@ def test_live_render_injects_last_error_without_persisting_it(monkeypatch):
         def flush_pending(self):
             return False
 
-    def fake_render_snapshot(snapshot, language="zh"):
+    def fake_render_snapshot(snapshot, language="zh", metrics=None):
         captured["snapshot"] = snapshot
         captured["language"] = language
         return RenderFrame()
@@ -63,7 +63,7 @@ def test_live_error_after_running_snapshot_renders_access_page(monkeypatch):
         def flush_pending(self):
             return False
 
-    def fake_render_snapshot(snapshot, language="zh"):
+    def fake_render_snapshot(snapshot, language="zh", metrics=None):
         captured["snapshot"] = snapshot
         return RenderFrame()
 
@@ -104,7 +104,7 @@ def test_live_ft8_overflow_uses_dynamic_animation_schedule(monkeypatch):
 
     sink = Sink()
     monkeypatch.setattr("tx5dr_device_panel.live.read_network_status", lambda: {})
-    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh": RenderFrame())
+    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh", metrics=None: RenderFrame())
     runner = LivePanelRunner(PanelConfig(), sink=sink)
     payload = json.loads((FIXTURES / "ft8.json").read_text())
     payload["updatedAt"] = 0
@@ -132,7 +132,7 @@ def test_live_second_render_does_not_reset_ft8_scroll_deadline(monkeypatch):
     monkeypatch.setattr("tx5dr_device_panel.live.time.monotonic", lambda: now)
     monkeypatch.setattr("tx5dr_device_panel.live.time.time", lambda: 0.0)
     monkeypatch.setattr("tx5dr_device_panel.live.read_network_status", lambda: {})
-    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh": RenderFrame())
+    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh", metrics=None: RenderFrame())
     runner = LivePanelRunner(PanelConfig(), sink=type("Sink", (), {"display": lambda *args, **kwargs: True, "flush_pending": lambda self: False})())
     payload = json.loads((FIXTURES / "ft8.json").read_text())
     payload["updatedAt"] = 0
@@ -157,7 +157,7 @@ def test_live_duplicate_ft8_batch_does_not_reset_scroll_deadline(monkeypatch):
     monkeypatch.setattr("tx5dr_device_panel.live.time.monotonic", lambda: now)
     monkeypatch.setattr("tx5dr_device_panel.live.time.time", lambda: 0.0)
     monkeypatch.setattr("tx5dr_device_panel.live.read_network_status", lambda: {})
-    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh": RenderFrame())
+    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh", metrics=None: RenderFrame())
     runner = LivePanelRunner(PanelConfig(), sink=type("Sink", (), {"display": lambda *args, **kwargs: True, "flush_pending": lambda self: False})())
     payload = json.loads((FIXTURES / "ft8.json").read_text())
     payload["updatedAt"] = 0
@@ -181,7 +181,7 @@ def test_live_new_ft8_batch_reschedules_after_current_dwell(monkeypatch):
     monkeypatch.setattr("tx5dr_device_panel.live.time.monotonic", lambda: now)
     monkeypatch.setattr("tx5dr_device_panel.live.time.time", lambda: 0.0)
     monkeypatch.setattr("tx5dr_device_panel.live.read_network_status", lambda: {})
-    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh": RenderFrame())
+    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", lambda snapshot, language="zh", metrics=None: RenderFrame())
     runner = LivePanelRunner(PanelConfig(), sink=type("Sink", (), {"display": lambda *args, **kwargs: True, "flush_pending": lambda self: False})())
     payload = json.loads((FIXTURES / "ft8.json").read_text())
     payload["updatedAt"] = 0

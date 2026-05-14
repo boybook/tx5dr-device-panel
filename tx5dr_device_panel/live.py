@@ -17,6 +17,7 @@ from tx5dr_device_panel.render.oled_luma import OledLumaBackend
 from tx5dr_device_panel.server import DeviceUiServerClient
 from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
+from tx5dr_device_panel.ui.text_metrics import TextMetrics
 
 
 class ImageSink(Protocol):
@@ -98,6 +99,10 @@ class LivePanelRunner:
             font_path=config.display.font_path,
             font_size=config.display.font_size,
         )
+        self.metrics = TextMetrics(
+            font_path=config.display.font_path,
+            font_size=config.display.font_size,
+        )
         self.sink = sink or self._create_sink()
         self._last_rendered_second = -1
         self._ft8_scroll_state_key: tuple[object, ...] | None = None
@@ -172,7 +177,7 @@ class LivePanelRunner:
             snapshot["access"] = {**snapshot.get("access", {}), "lastError": self.store.last_error}
         animated = self._is_access_page(snapshot) or self._is_ft8_scroll_active(snapshot)
         image = self.renderer.render(
-            render_snapshot(snapshot, language=self.config.language)
+            render_snapshot(snapshot, language=self.config.language, metrics=self.metrics)
         )
         displayed = self.sink.display(
             image,

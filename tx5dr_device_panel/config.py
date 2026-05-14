@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from tx5dr_device_panel.render.framebuffer import (
+from tx5dr_device_panel.fonts import (
     DEFAULT_FUSION_PIXEL_FONT_PATH,
     DEFAULT_FUSION_PIXEL_FONT_SIZE,
 )

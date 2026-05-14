@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tx5dr_device_panel.models import RenderFrame, Snapshot
+from tx5dr_device_panel.ui.text_metrics import DEFAULT_TEXT_METRICS, TextMetrics
 
 
 STATUS_BAR_BOTTOM = 9
@@ -54,13 +55,20 @@ class StatusBar:
     ptt_active: bool = False
 
 
-def render_status_bar(frame: RenderFrame, snapshot: Snapshot, page: str, ptt_active: bool) -> None:
+def render_status_bar(
+    frame: RenderFrame,
+    snapshot: Snapshot,
+    page: str,
+    ptt_active: bool,
+    metrics: TextMetrics | None = None,
+) -> None:
+    metrics = metrics or DEFAULT_TEXT_METRICS
     status = build_status_bar(snapshot, page, ptt_active)
     fill = 0 if status.ptt_active else 1
     frame.filled_rect(0, 0, 127, STATUS_BAR_BOTTOM, fill=1 if status.ptt_active else 0)
     frame.line(0, STATUS_BAR_BOTTOM, 127, STATUS_BAR_BOTTOM, fill=1)
-    frame.text(STATUS_BAR_LEFT_X, 1, _clip_to_width(status.left, STATUS_BAR_LEFT_WIDTH), fill=fill)
-    _right_text(frame, STATUS_BAR_RIGHT_X, 1, _clip_to_width(status.right, _right_width()), fill=fill)
+    frame.text(STATUS_BAR_LEFT_X, 1, _clip_to_width(status.left, STATUS_BAR_LEFT_WIDTH, metrics), fill=fill)
+    _right_text(frame, STATUS_BAR_RIGHT_X, 1, _clip_to_width(status.right, _right_width(), metrics), fill=fill, metrics=metrics)
     _network_icon(frame, snapshot, fill=fill)
 
 
@@ -127,8 +135,15 @@ def _right_width() -> int:
     return STATUS_BAR_RIGHT_X - STATUS_BAR_RIGHT_MIN_X
 
 
-def _right_text(frame: RenderFrame, right_x: int, y: int, text: str, fill: int = 1) -> None:
-    frame.text(max(STATUS_BAR_RIGHT_MIN_X, right_x - _text_width(text)), y, text, fill=fill)
+def _right_text(
+    frame: RenderFrame,
+    right_x: int,
+    y: int,
+    text: str,
+    fill: int = 1,
+    metrics: TextMetrics = DEFAULT_TEXT_METRICS,
+) -> None:
+    frame.text(metrics.right_x(right_x, text, min_x=STATUS_BAR_RIGHT_MIN_X), y, text, fill=fill)
 
 
 def _network_icon(frame: RenderFrame, snapshot: Snapshot, fill: int) -> None:
@@ -178,20 +193,9 @@ def _bitmap_icon(frame: RenderFrame, rows: tuple[str, ...], fill: int) -> None:
                 )
 
 
-def _clip_to_width(value: str, max_width: int) -> str:
-    if _text_width(value) <= max_width:
-        return value
-    marker = ">"
-    marker_width = _text_width(marker)
-    if max_width <= marker_width:
-        return ""
-    result = ""
-    for char in value:
-        if _text_width(result + char) > max_width - marker_width:
-            break
-        result += char
-    return result + marker
+def _clip_to_width(value: str, max_width: int, metrics: TextMetrics = DEFAULT_TEXT_METRICS) -> str:
+    return metrics.clip_width(value, max_width)
 
 
-def _text_width(text: str) -> int:
-    return sum(8 if ord(char) > 127 else 4 for char in text)
+def _text_width(text: str, metrics: TextMetrics = DEFAULT_TEXT_METRICS) -> int:
+    return metrics.text_width(text)

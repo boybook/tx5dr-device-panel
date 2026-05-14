@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tx5dr_device_panel.fonts import DEFAULT_FUSION_PIXEL_FONT_SIZE
 from tx5dr_device_panel.render.framebuffer import FramebufferRenderer
-from tx5dr_device_panel.render.framebuffer import DEFAULT_FUSION_PIXEL_FONT_SIZE
 from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
+from tx5dr_device_panel.ui.text_metrics import TextMetrics
 
 
 def run_preview(
@@ -20,6 +21,7 @@ def run_preview(
 
     pygame.init()
     renderer = FramebufferRenderer(font_path=font_path, font_size=font_size)
+    metrics = TextMetrics(font_path=font_path, font_size=font_size)
     index = 0
     surface = pygame.display.set_mode((128 * scale, 64 * scale))
     pygame.display.set_caption("TX-5DR Device Panel Preview")
@@ -39,7 +41,7 @@ def run_preview(
                     index = (index - 1) % len(fixtures)
 
         snapshot = _load_fixture(fixtures[index])
-        image = renderer.render(render_snapshot(snapshot, language=language)).convert("RGB")
+        image = renderer.render(render_snapshot(snapshot, language=language, metrics=metrics)).convert("RGB")
         raw = image.resize((128 * scale, 64 * scale)).tobytes()
         frame = pygame.image.frombuffer(raw, (128 * scale, 64 * scale), "RGB")
         surface.blit(frame, (0, 0))

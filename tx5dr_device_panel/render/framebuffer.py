@@ -1,37 +1,23 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
+from tx5dr_device_panel.fonts import (
+    BUNDLED_FUSION_PIXEL_FONT_PATHS,
+    DEFAULT_FUSION_PIXEL_12PX_FONT_PATH,
+    DEFAULT_FUSION_PIXEL_FONT_PATH,
+    DEFAULT_FUSION_PIXEL_FONT_SIZE,
+    font_path_for_size,
+    resolve_font_path,
+)
 from tx5dr_device_panel.models import DrawCommand, RenderFrame
-
-
-DEFAULT_FUSION_PIXEL_FONT_PATH = str(
-    Path(__file__).resolve().parents[1]
-    / "assets"
-    / "fonts"
-    / "fusion-pixel-font"
-    / "fusion-pixel-8px-monospaced-zh_hans.ttf"
-)
-DEFAULT_FUSION_PIXEL_12PX_FONT_PATH = str(
-    Path(__file__).resolve().parents[1]
-    / "assets"
-    / "fonts"
-    / "fusion-pixel-font"
-    / "fusion-pixel-12px-monospaced-zh_hans.ttf"
-)
-DEFAULT_FUSION_PIXEL_FONT_SIZE = 8
-BUNDLED_FUSION_PIXEL_FONT_PATHS = {
-    8: DEFAULT_FUSION_PIXEL_FONT_PATH,
-    12: DEFAULT_FUSION_PIXEL_12PX_FONT_PATH,
-}
 
 
 class FramebufferRenderer:
     def __init__(self, font_path: str | None = None, font_size: int = DEFAULT_FUSION_PIXEL_FONT_SIZE) -> None:
-        self.font_path = font_path or os.getenv("TX5DR_PANEL_FONT_PATH") or DEFAULT_FUSION_PIXEL_FONT_PATH
+        self.font_path = resolve_font_path(font_path)
         self.font_size = font_size
         self._use_bundled_variants = Path(self.font_path).expanduser() == Path(DEFAULT_FUSION_PIXEL_FONT_PATH)
         self.font = self._load_font()
@@ -95,8 +81,4 @@ class FramebufferRenderer:
         return self._font_cache[size]
 
     def _font_path_for_size(self, size: int) -> Path:
-        if self._use_bundled_variants:
-            path = Path(BUNDLED_FUSION_PIXEL_FONT_PATHS.get(size, self.font_path)).expanduser()
-            if path.exists():
-                return path
-        return Path(self.font_path).expanduser()
+        return font_path_for_size(self.font_path, size)

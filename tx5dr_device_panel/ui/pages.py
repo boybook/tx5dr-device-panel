@@ -14,6 +14,7 @@ from tx5dr_device_panel.ft8_display import (
 )
 from tx5dr_device_panel.models import DISPLAY_HEIGHT, DISPLAY_WIDTH, RenderFrame, Snapshot
 from tx5dr_device_panel.ui.status_bar import format_frequency, render_status_bar
+from tx5dr_device_panel.ui.text_metrics import DEFAULT_TEXT_METRICS, TextMetrics
 
 
 FT8_TEXT_X = 2
@@ -84,18 +85,19 @@ class AccessView:
     alert: bool = False
 
 
-def render_snapshot(snapshot: Snapshot, language: str = "zh") -> RenderFrame:
+def render_snapshot(snapshot: Snapshot, language: str = "zh", metrics: TextMetrics | None = None) -> RenderFrame:
+    metrics = metrics or DEFAULT_TEXT_METRICS
     frame = RenderFrame(DISPLAY_WIDTH, DISPLAY_HEIGHT)
     page = _select_page(snapshot)
-    render_status_bar(frame, snapshot, page=page, ptt_active=_is_ptt_active(snapshot))
+    render_status_bar(frame, snapshot, page=page, ptt_active=_is_ptt_active(snapshot), metrics=metrics)
     if page == "access":
-        _render_access(frame, snapshot, language=language)
+        _render_access(frame, snapshot, language=language, metrics=metrics)
     elif page == "voice":
-        _render_voice(frame, snapshot)
+        _render_voice(frame, snapshot, metrics=metrics)
     elif page == "cw":
-        _render_cw(frame, snapshot, language=language)
+        _render_cw(frame, snapshot, language=language, metrics=metrics)
     else:
-        _render_ft8(frame, snapshot, language=language)
+        _render_ft8(frame, snapshot, language=language, metrics=metrics)
     _ptt_overlay(frame, snapshot)
     return frame
 
@@ -112,17 +114,22 @@ def _select_page(snapshot: Snapshot) -> str:
     return "ft8"
 
 
-def _render_access(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
+def _render_access(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: TextMetrics) -> None:
     view = _access_view(snapshot, language)
     _access_particles(frame, snapshot)
-    _access_title(frame, view.title)
-    _center_text(frame, 43, _clip_width(_access_carousel_message(view.messages, snapshot), 116))
-    _center_text(frame, 55, _clip_width(view.endpoint, 124))
+    _access_title(frame, view.title, metrics)
+    _center_text(
+        frame,
+        43,
+        _clip_width(_access_carousel_message(view.messages, snapshot), 116, metrics=metrics),
+        metrics=metrics,
+    )
+    _center_text(frame, 55, _clip_width(view.endpoint, 124, metrics=metrics), metrics=metrics)
 
 
-def _access_title(frame: RenderFrame, title: str) -> None:
-    text = _clip_width(title, 116, font_size=ACCESS_TITLE_FONT_SIZE)
-    text_width = _text_width(text, font_size=ACCESS_TITLE_FONT_SIZE)
+def _access_title(frame: RenderFrame, title: str, metrics: TextMetrics) -> None:
+    text = _clip_width(title, 116, font_size=ACCESS_TITLE_FONT_SIZE, metrics=metrics)
+    text_width = _text_width(text, font_size=ACCESS_TITLE_FONT_SIZE, metrics=metrics)
     x = max(2, (DISPLAY_WIDTH - text_width) // 2)
     frame.filled_rect(max(0, x - 3), 18, min(127, x + text_width + 2), 31, fill=1)
     frame.text(x, 19, text, fill=0, font_size=ACCESS_TITLE_FONT_SIZE)
@@ -234,32 +241,32 @@ def _normalize_access_url(url: Any) -> str:
     return url.strip().replace("http://", "").replace("https://", "").rstrip("/")
 
 
-def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
+def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: TextMetrics) -> None:
     ft8 = snapshot.get("ft8") or {}
     own = _station_callsign(snapshot)
     decodes = _decode_window(_decode_entries(snapshot), snapshot, own_callsign=own)
     for idx, entry in enumerate(decodes):
         y = 12 + idx * 10
         if is_cycle_header(entry):
-            _inverse_row(frame, y, _clip_width(_entry_message(entry), 124))
+            _inverse_row(frame, y, _clip_width(_entry_message(entry), 124, metrics=metrics))
             continue
         message = _entry_message(entry)
         country = _country_label(entry, language)
-        country_text = _clip_width(country, FT8_COUNTRY_WIDTH) if country else ""
-        country_width = _text_width(country_text)
+        country_text = _clip_width(country, FT8_COUNTRY_WIDTH, metrics=metrics) if country else ""
+        country_width = _text_width(country_text, metrics=metrics)
         country_left = FT8_COUNTRY_RIGHT_X - country_width
         text_width = (
             DISPLAY_WIDTH - FT8_TEXT_X - 1
             if not country_text
             else max(8, country_left - FT8_COUNTRY_GAP - FT8_TEXT_X)
         )
-        text = _clip_width(message, text_width)
+        text = _clip_width(message, text_width, metrics=metrics)
         if own and own in message.upper():
-            _inverse_text(frame, FT8_TEXT_X, y, text)
+            _inverse_text(frame, FT8_TEXT_X, y, text, metrics)
         else:
             frame.text(FT8_TEXT_X, y, text)
         if country_text:
-            _right_text(frame, FT8_COUNTRY_RIGHT_X, y, country_text)
+            _right_text(frame, FT8_COUNTRY_RIGHT_X, y, country_text, metrics=metrics)
     tx = ft8.get("currentTx") or {}
     tx_text = tx.get("lastMessage") or (tx.get("messages") or [None])[-1] or "RX MONITOR"
     frame.line(0, 53, 127, 53)
@@ -271,22 +278,23 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
         tx_armed=_is_tx_armed(snapshot),
         ptt_active=_is_ptt_active(snapshot),
         right_label=count_label,
+        metrics=metrics,
     )
-    _right_text(frame, 126, 55, count_label)
+    _right_text(frame, 126, 55, count_label, metrics=metrics)
 
 
-def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
+def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: TextMetrics) -> None:
     cw = snapshot.get("cw") if isinstance(snapshot.get("cw"), dict) else {}
     decoder = cw.get("decoder") if isinstance(cw.get("decoder"), dict) else {}
     committed = _string_value(decoder.get("committedText"))
     pending = _string_value(decoder.get("pendingText"))
     if not _cw_decoder_enabled(decoder):
-        _render_cw_no_decoder(frame, cw, language)
+        _render_cw_no_decoder(frame, cw, language, metrics)
         return
     if committed or pending:
-        _render_cw_transcript(frame, committed, pending)
+        _render_cw_transcript(frame, committed, pending, metrics)
     else:
-        frame.text(CW_TEXT_X, CW_ROW_Y[0], _clip_width(_cw_waiting_decode_text(language), 124))
+        frame.text(CW_TEXT_X, CW_ROW_Y[0], _clip_width(_cw_waiting_decode_text(language), 124, metrics=metrics))
 
     frame.line(0, 53, 127, 53)
     _render_tx_footer(
@@ -295,16 +303,17 @@ def _render_cw(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
         tx_armed=bool((cw.get("currentTx") or {}).get("active")),
         ptt_active=_is_ptt_active(snapshot),
         right_label="",
+        metrics=metrics,
     )
 
 
-def _render_cw_no_decoder(frame: RenderFrame, cw: dict[str, Any], language: str) -> None:
+def _render_cw_no_decoder(frame: RenderFrame, cw: dict[str, Any], language: str, metrics: TextMetrics) -> None:
     text = _cw_sent_text(cw)
-    lines = _wrap_center_lines(text, 116, max_lines=3) if text else _cw_empty_lines(language)
+    lines = _wrap_center_lines(text, 116, max_lines=3, metrics=metrics) if text else _cw_empty_lines(language)
     total_height = len(lines) * 10 - 2
     y = max(13, 36 - total_height // 2)
     for index, line in enumerate(lines):
-        _center_text(frame, y + index * 10, line)
+        _center_text(frame, y + index * 10, line, metrics=metrics)
 
 
 def _cw_decoder_enabled(decoder: dict[str, Any]) -> bool:
@@ -314,45 +323,45 @@ def _cw_decoder_enabled(decoder: dict[str, Any]) -> bool:
     return bool(decoder.get("enabled"))
 
 
-def _render_cw_transcript(frame: RenderFrame, committed: str, pending: str) -> None:
-    row, x = _draw_cw_flow(frame, _normalize_cw_text(committed), row=0, x=CW_TEXT_X)
+def _render_cw_transcript(frame: RenderFrame, committed: str, pending: str, metrics: TextMetrics) -> None:
+    row, x = _draw_cw_flow(frame, _normalize_cw_text(committed), row=0, x=CW_TEXT_X, metrics=metrics)
     pending = _normalize_cw_text(pending)
     if not pending or row >= CW_ROWS:
         return
 
     if x > CW_TEXT_X:
-        x += _text_width(" ")
+        x += _text_width(" ", metrics=metrics)
         if x > 126:
             row += 1
             x = CW_TEXT_X
-    _draw_cw_pending_flow(frame, pending, row=row, x=x)
+    _draw_cw_pending_flow(frame, pending, row=row, x=x, metrics=metrics)
 
 
-def _draw_cw_flow(frame: RenderFrame, text: str, row: int, x: int) -> tuple[int, int]:
+def _draw_cw_flow(frame: RenderFrame, text: str, row: int, x: int, metrics: TextMetrics) -> tuple[int, int]:
     while text and row < CW_ROWS:
         available = 126 - x
-        chunk, text = _take_width(text, available)
+        chunk, text = _take_width(text, available, metrics=metrics)
         if not chunk:
             row += 1
             x = CW_TEXT_X
             continue
         frame.text(x, CW_ROW_Y[row], chunk)
-        x += _text_width(chunk)
+        x += _text_width(chunk, metrics=metrics)
         if text:
             row += 1
             x = CW_TEXT_X
     return row, x
 
 
-def _draw_cw_pending_flow(frame: RenderFrame, text: str, row: int, x: int) -> tuple[int, int]:
+def _draw_cw_pending_flow(frame: RenderFrame, text: str, row: int, x: int, metrics: TextMetrics) -> tuple[int, int]:
     while text and row < CW_ROWS:
         available = 126 - x
-        chunk, text = _take_width(text, available)
+        chunk, text = _take_width(text, available, metrics=metrics)
         if not chunk:
             row += 1
             x = CW_TEXT_X
             continue
-        width = max(4, _text_width(chunk))
+        width = max(4, _text_width(chunk, metrics=metrics))
         y = CW_ROW_Y[row]
         frame.filled_rect(max(0, x - 1), y, min(127, x + width), min(52, y + 8), fill=1)
         frame.text(x, y, chunk, fill=0)
@@ -363,12 +372,12 @@ def _draw_cw_pending_flow(frame: RenderFrame, text: str, row: int, x: int) -> tu
     return row, x
 
 
-def _take_width(text: str, width: int) -> tuple[str, str]:
+def _take_width(text: str, width: int, metrics: TextMetrics) -> tuple[str, str]:
     if width <= 0:
         return "", text
     result = ""
     for char in text:
-        if _text_width(result + char) > width:
+        if _text_width(result + char, metrics=metrics) > width:
             break
         result += char
     return result, text[len(result):]
@@ -402,34 +411,35 @@ def _cw_waiting_decode_text(language: str) -> str:
     return "等待解码结果..." if language.lower().startswith("zh") else "WAITING DECODES..."
 
 
-def _wrap_center_lines(text: str, width: int, max_lines: int) -> list[str]:
+def _wrap_center_lines(text: str, width: int, max_lines: int, metrics: TextMetrics) -> list[str]:
     remaining = _normalize_cw_text(text)
     lines: list[str] = []
     while remaining and len(lines) < max_lines:
-        chunk, remaining = _take_width(remaining, width)
+        chunk, remaining = _take_width(remaining, width, metrics=metrics)
         if not chunk:
             break
         if remaining and len(lines) == max_lines - 1:
-            chunk = _clip_width(chunk + remaining, width)
+            chunk = _clip_width(chunk + remaining, width, metrics=metrics)
             remaining = ""
         lines.append(chunk)
     return lines or [""]
 
 
-def _render_voice(frame: RenderFrame, snapshot: Snapshot) -> None:
+def _render_voice(frame: RenderFrame, snapshot: Snapshot, metrics: TextMetrics) -> None:
     radio = snapshot.get("radio") or {}
     voice = snapshot.get("voice") or {}
     frequency = _clip_width(
         format_frequency(radio.get("frequency")),
         96,
         font_size=VOICE_FREQ_FONT_SIZE,
+        metrics=metrics,
     )
-    _center_text(frame, 20, frequency, font_size=VOICE_FREQ_FONT_SIZE)
+    _center_text(frame, 20, frequency, font_size=VOICE_FREQ_FONT_SIZE, metrics=metrics)
     mode = voice.get("radioMode") or radio.get("radioMode") or "--"
-    _center_text(frame, 42, _clip_width(f"MODE {mode}", 96))
+    _center_text(frame, 42, _clip_width(f"MODE {mode}", 96, metrics=metrics), metrics=metrics)
     ptt = "PTT LOCK" if voice.get("pttLocked") else "PTT FREE"
     keyer = "KEYER" if voice.get("keyerActive") else "LIVE"
-    _center_text(frame, 52, _clip_width(f"{ptt} {keyer}", 120))
+    _center_text(frame, 52, _clip_width(f"{ptt} {keyer}", 120, metrics=metrics), metrics=metrics)
 
 
 def _ptt_overlay(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -454,20 +464,21 @@ def _render_tx_footer(
     tx_armed: bool,
     ptt_active: bool,
     right_label: str,
+    metrics: TextMetrics,
 ) -> None:
-    right_width = _text_width(right_label) if right_label else 0
+    right_width = _text_width(right_label, metrics=metrics) if right_label else 0
     content_right = 126 - right_width - (4 if right_label else 0)
     tx_indicator_active = tx_armed or ptt_active
     if not tx_indicator_active:
-        frame.text(2, FT8_FOOTER_Y, _clip_width(tx_text, content_right - 2))
+        frame.text(2, FT8_FOOTER_Y, _clip_width(tx_text, content_right - 2, metrics=metrics))
         return
 
     label = "TX"
-    label_width = _text_width(label)
+    label_width = _text_width(label, metrics=metrics)
     frame.filled_rect(1, FT8_FOOTER_Y, 2 + label_width, 63, fill=1)
     frame.text(2, FT8_FOOTER_Y, label, fill=0)
     message_x = 2 + label_width + 4
-    frame.text(message_x, FT8_FOOTER_Y, _clip_width(tx_text, max(8, content_right - message_x)))
+    frame.text(message_x, FT8_FOOTER_Y, _clip_width(tx_text, max(8, content_right - message_x), metrics=metrics))
 
 
 def _mode_name(snapshot: Snapshot) -> str:
@@ -486,17 +497,13 @@ def _clip(value: str, chars: int) -> str:
     return value if len(value) <= chars else value[: max(0, chars - 1)] + ">"
 
 
-def _clip_width(value: str, width: int, font_size: int = 8) -> str:
-    if _text_width(value, font_size=font_size) <= width:
-        return value
-    marker = ">"
-    marker_width = _text_width(marker, font_size=font_size)
-    result = ""
-    for char in value:
-        if _text_width(result + char, font_size=font_size) > width - marker_width:
-            break
-        result += char
-    return result + marker
+def _clip_width(
+    value: str,
+    width: int,
+    font_size: int = 8,
+    metrics: TextMetrics = DEFAULT_TEXT_METRICS,
+) -> str:
+    return metrics.clip_width(value, width, font_size=font_size)
 
 
 def _decode_window(
@@ -577,8 +584,8 @@ def _format_utc_compact(utc_seconds: float) -> str:
     return f"{total_seconds // 3600:02d}{(total_seconds // 60) % 60:02d}{total_seconds % 60:02d}"
 
 
-def _inverse_text(frame: RenderFrame, x: int, y: int, text: str) -> None:
-    width = min(126 - x, max(4, _text_width(text)))
+def _inverse_text(frame: RenderFrame, x: int, y: int, text: str, metrics: TextMetrics) -> None:
+    width = min(126 - x, max(4, _text_width(text, metrics=metrics)))
     frame.filled_rect(x - 1, y, x + width, min(52, y + 8), fill=1)
     frame.text(x, y, text, fill=0)
 
@@ -588,18 +595,31 @@ def _inverse_row(frame: RenderFrame, y: int, text: str) -> None:
     frame.text(2, y, text, fill=0)
 
 
-def _right_text(frame: RenderFrame, right_x: int, y: int, text: str, fill: int = 1) -> None:
-    frame.text(max(0, right_x - _text_width(text)), y, text, fill=fill)
+def _right_text(
+    frame: RenderFrame,
+    right_x: int,
+    y: int,
+    text: str,
+    fill: int = 1,
+    metrics: TextMetrics = DEFAULT_TEXT_METRICS,
+) -> None:
+    frame.text(metrics.right_x(right_x, text), y, text, fill=fill)
 
 
-def _center_text(frame: RenderFrame, y: int, text: str, fill: int = 1, font_size: int = 8) -> None:
-    x = max(0, (DISPLAY_WIDTH - _text_width(text, font_size=font_size)) // 2)
+def _center_text(
+    frame: RenderFrame,
+    y: int,
+    text: str,
+    fill: int = 1,
+    font_size: int = 8,
+    metrics: TextMetrics = DEFAULT_TEXT_METRICS,
+) -> None:
+    x = metrics.center_x(text, font_size=font_size)
     frame.text(x, y, text, fill=fill, font_size=font_size)
 
 
-def _text_width(text: str, font_size: int = 8) -> int:
-    scale = font_size / 8
-    return int(sum(8 if ord(char) > 127 else 4 for char in text) * scale)
+def _text_width(text: str, font_size: int = 8, metrics: TextMetrics = DEFAULT_TEXT_METRICS) -> int:
+    return metrics.text_width(text, font_size=font_size)
 
 
 def _station_callsign(snapshot: Snapshot) -> str | None:

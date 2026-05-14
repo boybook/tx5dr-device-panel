@@ -112,10 +112,10 @@ def test_access_page_uses_localized_engine_stopped_guidance():
     assert "TX-5DR" in zh_texts
     assert "TX-5DR" in en_texts
     assert "引擎未启动" in zh_texts
-    assert "打开后台启动" in zh_texts
+    assert "连接电台启动" in zh_texts
     assert "192.168.1.10:8076" in zh_texts
     assert "ENGINE STOPPED" in en_texts
-    assert "OPEN WEB UI" in en_texts
+    assert "CONNECT RADIO" in en_texts
 
 
 def test_access_page_prioritizes_no_network_over_server_or_engine_guidance():

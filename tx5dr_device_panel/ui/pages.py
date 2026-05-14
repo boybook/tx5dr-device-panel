@@ -37,7 +37,8 @@ ACCESS_TEXT = {
         "check_server": "检查TX-5DR服务",
         "console": "登录控制台诊断",
         "doctor": "控制台运行 tx5dr doctor",
-        "open_web": "打开后台启动",
+        "open_ui": "打开用户界面",
+        "connect_radio": "连接电台启动",
         "ip": "IP {ip}",
         "ssid": "SSID {ssid}",
         "no_ip": "IP --",
@@ -52,7 +53,8 @@ ACCESS_TEXT = {
         "check_server": "CHECK TX-5DR SVC",
         "console": "LOGIN CONSOLE",
         "doctor": "RUN tx5dr doctor",
-        "open_web": "OPEN WEB UI",
+        "open_ui": "OPEN UI",
+        "connect_radio": "CONNECT RADIO",
         "ip": "IP {ip}",
         "ssid": "SSID {ssid}",
         "no_ip": "IP --",
@@ -177,7 +179,7 @@ def _access_view(snapshot: Snapshot, language: str) -> AccessView:
             endpoint=url or text["url_wait"],
         )
     return AccessView(
-        title=text["open_web"],
+        title=text["open_ui"],
         messages=[_access_next_step(text, network), network_line],
         endpoint=url or text["url_wait"],
     )
@@ -190,7 +192,7 @@ def _access_text(language: str) -> dict[str, str]:
 def _access_next_step(text: dict[str, str], network: dict[str, Any]) -> str:
     if network.get("hotspot") and network.get("ssid"):
         return text["join_ssid"].format(ssid=network["ssid"])
-    return text["open_web"]
+    return text["connect_radio"]
 
 
 def _network_hint(text: dict[str, str], network: dict[str, Any]) -> str:

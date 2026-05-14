@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from tx5dr_device_panel.models import DrawCommand, RenderFrame
 
 
+DEFAULT_DINKIE_FONT_PATH = (
+    "/Users/fangyizhou/Downloads/DinkieBitmap-v1.5.0-KeDingKeMao/ttf/"
+    "DinkieBitmap-7px.ttf"
+)
+DEFAULT_DINKIE_FONT_SIZE = 8
+
+
 class FramebufferRenderer:
-    def __init__(self) -> None:
-        self.font = ImageFont.load_default()
+    def __init__(self, font_path: str | None = None, font_size: int = DEFAULT_DINKIE_FONT_SIZE) -> None:
+        self.font_path = font_path or os.getenv("TX5DR_PANEL_FONT_PATH") or DEFAULT_DINKIE_FONT_PATH
+        self.font_size = font_size
+        self.font = self._load_font()
 
     def render(self, frame: RenderFrame) -> Image.Image:
         image = Image.new("1", (frame.width, frame.height), 0)
@@ -45,3 +57,12 @@ class FramebufferRenderer:
         box = (command.x, command.y, command.x2 + 1, command.y2 + 1)
         region = image.crop(box)
         image.paste(ImageChops.invert(region), box)
+
+    def _load_font(self) -> ImageFont.FreeTypeFont:
+        path = Path(self.font_path).expanduser()
+        if not path.exists():
+            raise FileNotFoundError(
+                f"DinkieBitmap font not found: {path}. "
+                "Set TX5DR_PANEL_FONT_PATH or display.font_path to the installed font file."
+            )
+        return ImageFont.truetype(str(path), size=self.font_size)

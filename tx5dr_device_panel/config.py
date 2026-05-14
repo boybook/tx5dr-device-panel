@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from tx5dr_device_panel.render.framebuffer import DEFAULT_DINKIE_FONT_PATH, DEFAULT_DINKIE_FONT_SIZE
+
 
 DEFAULT_CONFIG_PATH = Path("/etc/tx5dr/device-panel.yaml")
 DEV_CONFIG_PATH = Path("./device-panel.dev.yaml")
@@ -27,6 +29,8 @@ class DisplayConfig:
     height: int = 64
     backend: str = "preview"
     scale: int = 4
+    font_path: str = DEFAULT_DINKIE_FONT_PATH
+    font_size: int = DEFAULT_DINKIE_FONT_SIZE
 
 
 @dataclass(frozen=True)
@@ -94,6 +98,10 @@ def _apply_env(config: PanelConfig) -> PanelConfig:
         server = replace(server, token_file=value)
     if value := os.getenv("TX5DR_PANEL_BACKEND"):
         display = replace(display, backend=value)
+    if value := os.getenv("TX5DR_PANEL_FONT_PATH"):
+        display = replace(display, font_path=value)
+    if value := os.getenv("TX5DR_PANEL_FONT_SIZE"):
+        display = replace(display, font_size=int(value))
     if value := os.getenv("TX5DR_PANEL_CONTROLLER"):
         hardware = replace(hardware, controller=value)
     if value := os.getenv("TX5DR_PANEL_PROTOCOL"):
@@ -117,6 +125,10 @@ def _apply_cli(config: PanelConfig, args: argparse.Namespace | None) -> PanelCon
         display = replace(display, backend=args.backend)
     if getattr(args, "scale", None):
         display = replace(display, scale=args.scale)
+    if getattr(args, "font_path", None):
+        display = replace(display, font_path=args.font_path)
+    if getattr(args, "font_size", None):
+        display = replace(display, font_size=args.font_size)
     if getattr(args, "controller", None):
         hardware = replace(hardware, controller=args.controller)
     if getattr(args, "protocol", None):

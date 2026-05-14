@@ -18,6 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--token-file")
     parser.add_argument("--backend", choices=["preview", "oled", "snapshot"])
     parser.add_argument("--scale", type=int)
+    parser.add_argument("--font-path")
+    parser.add_argument("--font-size", type=int)
     parser.add_argument("--controller", choices=["ssd1306", "sh1106"])
     parser.add_argument("--protocol", choices=["i2c", "spi"])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -39,10 +41,20 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args)
 
     if args.command == "snapshot":
-        render_fixture_to_png(Path(args.fixture), Path(args.output))
+        render_fixture_to_png(
+            Path(args.fixture),
+            Path(args.output),
+            font_path=config.display.font_path,
+            font_size=config.display.font_size,
+        )
         return 0
     if args.command == "preview":
-        run_preview([Path(item) for item in args.fixture], scale=config.display.scale)
+        run_preview(
+            [Path(item) for item in args.fixture],
+            scale=config.display.scale,
+            font_path=config.display.font_path,
+            font_size=config.display.font_size,
+        )
         return 0
     if args.command == "live":
         asyncio.run(_live(config))

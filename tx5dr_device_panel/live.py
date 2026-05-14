@@ -42,7 +42,10 @@ class LivePanelRunner:
         self.config = config
         self.store = PanelStore()
         self.client = DeviceUiServerClient(config.server)
-        self.renderer = FramebufferRenderer()
+        self.renderer = FramebufferRenderer(
+            font_path=config.display.font_path,
+            font_size=config.display.font_size,
+        )
         self.sink = sink or self._create_sink()
 
     async def run(self) -> None:

@@ -8,11 +8,16 @@ from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
 
 
-def run_preview(fixtures: list[Path], scale: int = 4) -> None:
+def run_preview(
+    fixtures: list[Path],
+    scale: int = 4,
+    font_path: str | None = None,
+    font_size: int = 8,
+) -> None:
     import pygame
 
     pygame.init()
-    renderer = FramebufferRenderer()
+    renderer = FramebufferRenderer(font_path=font_path, font_size=font_size)
     index = 0
     surface = pygame.display.set_mode((128 * scale, 64 * scale))
     pygame.display.set_caption("TX-5DR Device Panel Preview")

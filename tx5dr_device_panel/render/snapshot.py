@@ -8,11 +8,16 @@ from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
 
 
-def render_fixture_to_png(fixture: Path, output: Path) -> Path:
+def render_fixture_to_png(
+    fixture: Path,
+    output: Path,
+    font_path: str | None = None,
+    font_size: int = 8,
+) -> Path:
     data = json.loads(fixture.read_text(encoding="utf-8"))
     store = PanelStore()
     snapshot = store.apply({"type": "snapshot", "payload": data})
-    image = FramebufferRenderer().render(render_snapshot(snapshot))
+    image = FramebufferRenderer(font_path=font_path, font_size=font_size).render(render_snapshot(snapshot))
     output.parent.mkdir(parents=True, exist_ok=True)
     image.save(output)
     return output

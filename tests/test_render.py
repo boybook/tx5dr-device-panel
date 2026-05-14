@@ -37,3 +37,20 @@ def test_ptt_draws_global_indicator_and_border():
     rects = [command for command in frame.commands if command.kind == "rect"]
     assert any((rect.x, rect.y, rect.x2, rect.y2) == (0, 0, 127, 63) for rect in rects)
     assert any(command.kind == "filled_rect" and command.y == 0 for command in frame.commands)
+
+
+def test_renderer_uses_dinkie_bitmap_and_supports_chinese_text():
+    renderer = FramebufferRenderer()
+
+    assert renderer.font_path.endswith("DinkieBitmap-7px.ttf")
+    assert renderer.font.getbbox("中文状态")[2] > 0
+    frame = render_snapshot(
+        {
+            "engine": {"running": False},
+            "access": {"localUrl": "http://设备.local:8076"},
+            "network": {"connected": True, "ip": "192.168.1.10", "ssid": "测试网络"},
+            "updatedAt": 1778697600000,
+        }
+    )
+    image = renderer.render(frame)
+    assert image.getbbox() is not None

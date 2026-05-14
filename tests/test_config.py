@@ -11,6 +11,8 @@ def test_cli_overrides_defaults():
         token_file="/tmp/token",
         backend="snapshot",
         scale=6,
+        font_path="/tmp/DinkieBitmap-7px.ttf",
+        font_size=8,
         controller="sh1106",
         protocol="spi",
     )
@@ -20,5 +22,7 @@ def test_cli_overrides_defaults():
     assert config.server.base_url == "http://server:8076"
     assert config.server.device_id == "panel-x"
     assert config.display.backend == "snapshot"
+    assert config.display.font_path == "/tmp/DinkieBitmap-7px.ttf"
+    assert config.display.font_size == 8
     assert config.hardware.controller == "sh1106"
     assert config.hardware.protocol == "spi"

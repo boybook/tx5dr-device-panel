@@ -28,6 +28,9 @@ Precedence is CLI > environment > YAML > defaults.
 - Production YAML: `/etc/tx5dr/device-panel.yaml`
 - Development YAML: `./device-panel.dev.yaml`
 - Environment prefix: `TX5DR_PANEL_`
+- Font: DinkieBitmap 7px TTF is used for English and Chinese text. The font file is not bundled
+  because its EULA forbids redistribution; install it separately and set `display.font_path` on
+  target devices.
 
 Example:
 
@@ -40,6 +43,8 @@ display:
   width: 128
   height: 64
   backend: "preview"
+  font_path: "/Users/fangyizhou/Downloads/DinkieBitmap-v1.5.0-KeDingKeMao/ttf/DinkieBitmap-7px.ttf"
+  font_size: 8
 hardware:
   controller: "sh1106"
   protocol: "i2c"

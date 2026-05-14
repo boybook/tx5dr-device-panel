@@ -20,6 +20,7 @@ class DrawCommand:
     width: int | None = None
     height: int | None = None
     fill: int = 1
+    font_size: int | None = None
 
 
 @dataclass
@@ -31,8 +32,8 @@ class RenderFrame:
     def add(self, command: DrawCommand) -> None:
         self.commands.append(command)
 
-    def text(self, x: int, y: int, text: str, fill: int = 1) -> None:
-        self.add(DrawCommand("text", x=x, y=y, text=text, fill=fill))
+    def text(self, x: int, y: int, text: str, fill: int = 1, font_size: int | None = None) -> None:
+        self.add(DrawCommand("text", x=x, y=y, text=text, fill=fill, font_size=font_size))
 
     def line(self, x: int, y: int, x2: int, y2: int, fill: int = 1) -> None:
         self.add(DrawCommand("line", x=x, y=y, x2=x2, y2=y2, fill=fill))

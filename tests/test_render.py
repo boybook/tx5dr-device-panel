@@ -101,6 +101,72 @@ def test_renderer_uses_bundled_fusion_pixel_font_and_supports_chinese_text():
     assert image.getbbox() is not None
 
 
+def test_access_page_uses_localized_engine_stopped_guidance():
+    store = PanelStore()
+    snapshot = store.apply({"type": "snapshot", "payload": json.loads((FIXTURES / "access.json").read_text())})
+
+    zh_texts = [command.text for command in render_snapshot(snapshot, language="zh").commands if command.kind == "text"]
+    en_texts = [command.text for command in render_snapshot(snapshot, language="en").commands if command.kind == "text"]
+
+    assert "引擎未启动" in zh_texts
+    assert "打开后台启动" in zh_texts
+    assert "192.168.1.10:8076" in zh_texts
+    assert "ENGINE STOPPED" in en_texts
+    assert "OPEN WEB UI" in en_texts
+
+
+def test_access_page_prioritizes_no_network_over_server_or_engine_guidance():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "boot.json").read_text())
+    payload["access"]["lastError"] = "server down"
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    texts = [command.text for command in render_snapshot(snapshot, language="zh").commands if command.kind == "text"]
+
+    assert "设备未联网" in texts
+    assert "连接网线/WiFi" in texts
+    assert "IP --" in texts
+    assert "后端离线" not in texts
+    assert "引擎未启动" not in texts
+
+
+def test_access_page_shows_server_down_when_network_is_available():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "access.json").read_text())
+    payload["access"]["lastError"] = "Connection refused"
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    texts = [command.text for command in render_snapshot(snapshot, language="en").commands if command.kind == "text"]
+
+    assert "SERVER OFF" in texts
+    assert "CHECK TX-5DR SVC" in texts
+    assert "IP 192.168.1.10" in texts
+
+
+def test_access_page_guides_hotspot_join_when_hotspot_ssid_is_available():
+    store = PanelStore()
+    snapshot = store.apply({"type": "snapshot", "payload": json.loads((FIXTURES / "network.json").read_text())})
+    texts = [command.text for command in render_snapshot(snapshot, language="en").commands if command.kind == "text"]
+
+    assert "ENGINE STOPPED" in texts
+    assert "JOIN TX5DR" in texts
+    assert "SSID TX5DR" in texts
+    assert "10.42.0.1:8076" in texts
+
+
+def test_access_border_reuses_status_bar_divider_without_double_top_line():
+    store = PanelStore()
+    snapshot = store.apply({"type": "snapshot", "payload": json.loads((FIXTURES / "access.json").read_text())})
+    frame = render_snapshot(snapshot)
+
+    assert not any(
+        command.kind == "rect" and (command.x, command.y, command.x2, command.y2) == (0, 10, 127, 63)
+        for command in frame.commands
+    )
+    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 9, 127, 9) for command in frame.commands)
+    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 10, 0, 63) for command in frame.commands)
+    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (127, 10, 127, 63) for command in frame.commands)
+    assert any(command.kind == "line" and (command.x, command.y, command.x2, command.y2) == (0, 63, 127, 63) for command in frame.commands)
+
+
 def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
     store = PanelStore()
     payload = json.loads((FIXTURES / "ft8.json").read_text())
@@ -192,3 +258,82 @@ def test_status_bar_component_is_shared_by_access_ft8_and_voice_pages():
 
         assert "UTC 12:00:15" in texts
         assert right_label in texts
+
+
+def test_status_bar_draws_network_icons_for_wifi_wired_and_disconnected_states():
+    wifi = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "network.json").read_text())})
+    wired = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "access.json").read_text())})
+    offline = PanelStore().apply({"type": "snapshot", "payload": json.loads((FIXTURES / "boot.json").read_text())})
+
+    wifi_commands = render_snapshot(wifi).commands
+    wired_commands = render_snapshot(wired).commands
+    offline_commands = render_snapshot(offline).commands
+
+    assert _has_pixel(wifi_commands, 120, 2)
+    assert _has_pixel(wifi_commands, 119, 3)
+    assert _has_pixel(wired_commands, 120, 1)
+    assert _has_pixel(wired_commands, 119, 4)
+    assert _has_pixel(wired_commands, 124, 4)
+    assert _has_pixel(offline_commands, 119, 1)
+    assert _has_pixel(offline_commands, 126, 8)
+
+
+def test_status_bar_right_text_avoids_network_icon_area():
+    expected_right_labels = {
+        "access.json": "ACCESS",
+        "ft8.json": "FT8·7.074",
+        "voice.json": "FM·145.500",
+    }
+
+    for fixture_name, right_label in expected_right_labels.items():
+        store = PanelStore()
+        payload = json.loads((FIXTURES / fixture_name).read_text())
+        snapshot = store.apply({"type": "snapshot", "payload": payload})
+        frame = render_snapshot(snapshot)
+        command = next(
+            command for command in frame.commands if command.kind == "text" and command.text == right_label
+        )
+
+        assert command.x + _test_text_width(right_label) <= 116
+
+
+def test_status_bar_network_icon_uses_inverse_fill_when_ptt_is_active():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "network.json").read_text())
+    payload["radio"] = {"ptt": True}
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot)
+
+    assert any(
+        command.kind == "filled_rect"
+        and command.fill == 0
+        and (command.x, command.y, command.x2, command.y2) == (120, 2, 120, 2)
+        for command in frame.commands
+    )
+
+
+def test_voice_monitor_uses_large_centered_status_lines_without_title():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "voice.json").read_text())
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot)
+    text_commands = {command.text: command for command in frame.commands if command.kind == "text"}
+
+    assert "VOICE MONITOR" not in text_commands
+    assert text_commands["145.500"].font_size == 16
+    assert (text_commands["145.500"].x, text_commands["145.500"].y) == (36, 20)
+    assert (text_commands["MODE FM"].x, text_commands["MODE FM"].y) == (50, 42)
+    assert (text_commands["PTT FREE LIVE"].x, text_commands["PTT FREE LIVE"].y) == (38, 52)
+
+
+def _test_text_width(text: str) -> int:
+    return sum(8 if ord(char) > 127 else 4 for char in text)
+
+
+def _has_pixel(commands, x: int, y: int, fill: int = 1) -> bool:
+    return any(
+        command.kind == "filled_rect"
+        and command.fill == fill
+        and (command.x, command.y, command.x2, command.y2) == (x, y, x, y)
+        for command in commands
+    )

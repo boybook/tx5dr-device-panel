@@ -11,6 +11,36 @@ FT8_COUNTRY_RIGHT_X = 126
 FT8_COUNTRY_WIDTH = 44
 FT8_COUNTRY_GAP = 4
 FT8_FOOTER_Y = 55
+VOICE_FREQ_FONT_SIZE = 16
+
+ACCESS_TEXT = {
+    "zh": {
+        "no_network": "设备未联网",
+        "server_down": "后端离线",
+        "engine_stopped": "引擎未启动",
+        "connect_network": "连接网线/WiFi",
+        "join_ssid": "连接{ssid}",
+        "check_server": "检查TX-5DR服务",
+        "open_web": "打开后台启动",
+        "ip": "IP {ip}",
+        "ssid": "SSID {ssid}",
+        "no_ip": "IP --",
+        "url_wait": "后台不可用",
+    },
+    "en": {
+        "no_network": "NO NETWORK",
+        "server_down": "SERVER OFF",
+        "engine_stopped": "ENGINE STOPPED",
+        "connect_network": "JOIN LAN/WIFI",
+        "join_ssid": "JOIN {ssid}",
+        "check_server": "CHECK TX-5DR SVC",
+        "open_web": "OPEN WEB UI",
+        "ip": "IP {ip}",
+        "ssid": "SSID {ssid}",
+        "no_ip": "IP --",
+        "url_wait": "WEB UI UNAVAILABLE",
+    },
+}
 
 
 def render_snapshot(snapshot: Snapshot, language: str = "zh") -> RenderFrame:
@@ -18,7 +48,7 @@ def render_snapshot(snapshot: Snapshot, language: str = "zh") -> RenderFrame:
     page = _select_page(snapshot)
     render_status_bar(frame, snapshot, page=page, ptt_active=_is_ptt_active(snapshot))
     if page == "access":
-        _render_access(frame, snapshot)
+        _render_access(frame, snapshot, language=language)
     elif page == "voice":
         _render_voice(frame, snapshot)
     else:
@@ -37,19 +67,67 @@ def _select_page(snapshot: Snapshot) -> str:
     return "ft8"
 
 
-def _render_access(frame: RenderFrame, snapshot: Snapshot) -> None:
-    network = snapshot.get("network") or {}
-    access = snapshot.get("access") or {}
-    frame.text(2, 13, "ACCESS / SETUP")
-    status = "NET OK" if network.get("connected") else "NET WAIT"
-    frame.text(2, 24, status)
-    if network.get("ip"):
-        frame.text(52, 24, _clip(str(network["ip"]), 12))
-    if network.get("ssid"):
-        frame.text(2, 34, _clip(f"SSID {network['ssid']}", 20))
-    url = access.get("localUrl") or "http://tx5dr.local"
-    frame.text(2, 48, _clip(url.replace("http://", ""), 20))
-    frame.rect(0, 10, 127, 63)
+def _render_access(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
+    for y, text in zip((13, 25, 37, 49), _access_lines(snapshot, language), strict=True):
+        frame.text(2, y, _clip_width(text, 124))
+    _access_border(frame)
+
+
+def _access_border(frame: RenderFrame) -> None:
+    # Reuse the status-bar divider as the top edge to avoid a visually doubled line.
+    frame.line(0, 10, 0, 63)
+    frame.line(127, 10, 127, 63)
+    frame.line(0, 63, 127, 63)
+
+
+def _access_lines(snapshot: Snapshot, language: str) -> list[str]:
+    text = _access_text(language)
+    network = snapshot.get("network") if isinstance(snapshot.get("network"), dict) else {}
+    access = snapshot.get("access") if isinstance(snapshot.get("access"), dict) else {}
+    engine = snapshot.get("engine") if isinstance(snapshot.get("engine"), dict) else {}
+    ip = network.get("ip")
+    ssid = network.get("ssid")
+    has_network = bool(network.get("connected") and ip)
+    last_error = access.get("lastError")
+
+    if not has_network:
+        return [
+            text["no_network"],
+            _network_hint(text, network),
+            text["ssid"].format(ssid=ssid) if ssid else text["no_ip"],
+            text["url_wait"],
+        ]
+
+    network_line = text["ssid"].format(ssid=ssid) if ssid else text["ip"].format(ip=ip)
+    url = _access_url(access)
+    if last_error:
+        return [text["server_down"], text["check_server"], network_line, url]
+    if not engine.get("running"):
+        return [text["engine_stopped"], _access_next_step(text, network), network_line, url]
+    return [text["open_web"], _access_next_step(text, network), network_line, url]
+
+
+def _access_text(language: str) -> dict[str, str]:
+    return ACCESS_TEXT["zh"] if language.lower().startswith("zh") else ACCESS_TEXT["en"]
+
+
+def _access_next_step(text: dict[str, str], network: dict[str, Any]) -> str:
+    if network.get("hotspot") and network.get("ssid"):
+        return text["join_ssid"].format(ssid=network["ssid"])
+    return text["open_web"]
+
+
+def _network_hint(text: dict[str, str], network: dict[str, Any]) -> str:
+    if network.get("hotspot") and network.get("ssid"):
+        return text["join_ssid"].format(ssid=network["ssid"])
+    return text["connect_network"]
+
+
+def _access_url(access: dict[str, Any]) -> str:
+    url = access.get("localUrl")
+    if not isinstance(url, str) or not url.strip():
+        url = "http://tx5dr.local:8076"
+    return url.replace("http://", "").replace("https://", "").rstrip("/")
 
 
 def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
@@ -93,13 +171,17 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
 def _render_voice(frame: RenderFrame, snapshot: Snapshot) -> None:
     radio = snapshot.get("radio") or {}
     voice = snapshot.get("voice") or {}
-    frame.text(2, 13, "VOICE MONITOR")
-    frame.text(2, 26, _clip(format_frequency(radio.get("frequency")), 20))
+    frequency = _clip_width(
+        format_frequency(radio.get("frequency")),
+        96,
+        font_size=VOICE_FREQ_FONT_SIZE,
+    )
+    _center_text(frame, 20, frequency, font_size=VOICE_FREQ_FONT_SIZE)
     mode = voice.get("radioMode") or radio.get("radioMode") or "--"
-    frame.text(2, 38, _clip(f"MODE {mode}", 20))
+    _center_text(frame, 42, _clip_width(f"MODE {mode}", 96))
     ptt = "PTT LOCK" if voice.get("pttLocked") else "PTT FREE"
     keyer = "KEYER" if voice.get("keyerActive") else "LIVE"
-    frame.text(2, 50, _clip(f"{ptt} {keyer}", 20))
+    _center_text(frame, 52, _clip_width(f"{ptt} {keyer}", 120))
 
 
 def _ptt_overlay(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -152,14 +234,14 @@ def _clip(value: str, chars: int) -> str:
     return value if len(value) <= chars else value[: max(0, chars - 1)] + ">"
 
 
-def _clip_width(value: str, width: int) -> str:
-    if _text_width(value) <= width:
+def _clip_width(value: str, width: int, font_size: int = 8) -> str:
+    if _text_width(value, font_size=font_size) <= width:
         return value
     marker = ">"
-    marker_width = _text_width(marker)
+    marker_width = _text_width(marker, font_size=font_size)
     result = ""
     for char in value:
-        if _text_width(result + char) > width - marker_width:
+        if _text_width(result + char, font_size=font_size) > width - marker_width:
             break
         result += char
     return result + marker
@@ -244,8 +326,14 @@ def _right_text(frame: RenderFrame, right_x: int, y: int, text: str, fill: int =
     frame.text(max(0, right_x - _text_width(text)), y, text, fill=fill)
 
 
-def _text_width(text: str) -> int:
-    return sum(8 if ord(char) > 127 else 4 for char in text)
+def _center_text(frame: RenderFrame, y: int, text: str, fill: int = 1, font_size: int = 8) -> None:
+    x = max(0, (DISPLAY_WIDTH - _text_width(text, font_size=font_size)) // 2)
+    frame.text(x, y, text, fill=fill, font_size=font_size)
+
+
+def _text_width(text: str, font_size: int = 8) -> int:
+    scale = font_size / 8
+    return int(sum(8 if ord(char) > 127 else 4 for char in text) * scale)
 
 
 def _station_callsign(snapshot: Snapshot) -> str | None:

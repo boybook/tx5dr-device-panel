@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 import asyncio
 import contextlib
@@ -123,7 +124,7 @@ class LivePanelRunner:
                 self._render_current(update_clock=True)
 
     def _render_current(self, update_clock: bool = False, force_network: bool = False) -> None:
-        snapshot = self.store.snapshot
+        snapshot = deepcopy(self.store.snapshot)
         if update_clock:
             snapshot["updatedAt"] = int(time.time() * 1000)
         now = time.monotonic()
@@ -131,6 +132,8 @@ class LivePanelRunner:
             self._network_status = read_network_status()
             self._last_network_refresh = now
         snapshot["network"] = {**snapshot.get("network", {}), **self._network_status}
+        if self.store.last_error:
+            snapshot["access"] = {**snapshot.get("access", {}), "lastError": self.store.last_error}
         image = self.renderer.render(
             render_snapshot(snapshot, language=self.config.language)
         )

@@ -23,6 +23,7 @@ class FramebufferRenderer:
         self.font_path = font_path or os.getenv("TX5DR_PANEL_FONT_PATH") or DEFAULT_FUSION_PIXEL_FONT_PATH
         self.font_size = font_size
         self.font = self._load_font()
+        self._font_cache: dict[int, ImageFont.FreeTypeFont] = {self.font_size: self.font}
 
     def render(self, frame: RenderFrame) -> Image.Image:
         image = Image.new("1", (frame.width, frame.height), 0)
@@ -33,7 +34,12 @@ class FramebufferRenderer:
 
     def _draw_command(self, image: Image.Image, draw: ImageDraw.ImageDraw, command: DrawCommand) -> None:
         if command.kind == "text" and command.text is not None:
-            draw.text((command.x, command.y), command.text, font=self.font, fill=command.fill)
+            draw.text(
+                (command.x, command.y),
+                command.text,
+                font=self._font_for_size(command.font_size),
+                fill=command.fill,
+            )
         elif command.kind == "line":
             draw.line((command.x, command.y, command.x2, command.y2), fill=command.fill)
         elif command.kind == "rect":
@@ -69,3 +75,9 @@ class FramebufferRenderer:
                 "Set TX5DR_PANEL_FONT_PATH or display.font_path to another font file."
             )
         return ImageFont.truetype(str(path), size=self.font_size)
+
+    def _font_for_size(self, font_size: int | None) -> ImageFont.FreeTypeFont:
+        size = font_size or self.font_size
+        if size not in self._font_cache:
+            self._font_cache[size] = ImageFont.truetype(str(Path(self.font_path).expanduser()), size=size)
+        return self._font_cache[size]

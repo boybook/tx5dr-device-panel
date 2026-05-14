@@ -8,9 +8,43 @@ from tx5dr_device_panel.models import RenderFrame, Snapshot
 
 STATUS_BAR_BOTTOM = 9
 STATUS_BAR_LEFT_X = 2
-STATUS_BAR_RIGHT_X = 126
+STATUS_BAR_RIGHT_X = 116
 STATUS_BAR_LEFT_WIDTH = 54
 STATUS_BAR_RIGHT_MIN_X = 58
+NETWORK_ICON_LEFT = 119
+NETWORK_ICON_RIGHT = 126
+NETWORK_ICON_TOP = 1
+
+WIFI_CONNECTED_ICON = (
+    "........",
+    ".######.",
+    "#......#",
+    "........",
+    "..####..",
+    ".#....#.",
+    "...##...",
+    "...##...",
+)
+WIFI_DISCONNECTED_ICON = (
+    "#.......",
+    ".#.###..",
+    "..#...#.",
+    "...#....",
+    "..####..",
+    ".#..#.#.",
+    "...##.#.",
+    "...##..#",
+)
+WIRED_CONNECTED_ICON = (
+    ".######.",
+    "#.#..#.#",
+    "#......#",
+    "#.####.#",
+    "#.#..#.#",
+    "#.####.#",
+    "#......#",
+    ".######.",
+)
 
 
 @dataclass(frozen=True)
@@ -27,6 +61,7 @@ def render_status_bar(frame: RenderFrame, snapshot: Snapshot, page: str, ptt_act
     frame.line(0, STATUS_BAR_BOTTOM, 127, STATUS_BAR_BOTTOM, fill=1)
     frame.text(STATUS_BAR_LEFT_X, 1, _clip_to_width(status.left, STATUS_BAR_LEFT_WIDTH), fill=fill)
     _right_text(frame, STATUS_BAR_RIGHT_X, 1, _clip_to_width(status.right, _right_width()), fill=fill)
+    _network_icon(frame, snapshot, fill=fill)
 
 
 def build_status_bar(snapshot: Snapshot, page: str, ptt_active: bool) -> StatusBar:
@@ -92,6 +127,48 @@ def _right_width() -> int:
 
 def _right_text(frame: RenderFrame, right_x: int, y: int, text: str, fill: int = 1) -> None:
     frame.text(max(STATUS_BAR_RIGHT_MIN_X, right_x - _text_width(text)), y, text, fill=fill)
+
+
+def _network_icon(frame: RenderFrame, snapshot: Snapshot, fill: int) -> None:
+    state = _network_state(snapshot)
+    if state == "wifi":
+        _wifi_connected_icon(frame, fill)
+    elif state == "wired":
+        _wired_connected_icon(frame, fill)
+    else:
+        _wifi_disconnected_icon(frame, fill)
+
+
+def _network_state(snapshot: Snapshot) -> str:
+    network = snapshot.get("network")
+    if not isinstance(network, dict) or not network.get("connected") or not network.get("ip"):
+        return "wifi_off"
+    return "wifi" if network.get("ssid") else "wired"
+
+
+def _wifi_connected_icon(frame: RenderFrame, fill: int) -> None:
+    _bitmap_icon(frame, WIFI_CONNECTED_ICON, fill)
+
+
+def _wifi_disconnected_icon(frame: RenderFrame, fill: int) -> None:
+    _bitmap_icon(frame, WIFI_DISCONNECTED_ICON, fill)
+
+
+def _wired_connected_icon(frame: RenderFrame, fill: int) -> None:
+    _bitmap_icon(frame, WIRED_CONNECTED_ICON, fill)
+
+
+def _bitmap_icon(frame: RenderFrame, rows: tuple[str, ...], fill: int) -> None:
+    for y, row in enumerate(rows):
+        for x, pixel in enumerate(row):
+            if pixel == "#":
+                frame.filled_rect(
+                    NETWORK_ICON_LEFT + x,
+                    NETWORK_ICON_TOP + y,
+                    NETWORK_ICON_LEFT + x,
+                    NETWORK_ICON_TOP + y,
+                    fill=fill,
+                )
 
 
 def _clip_to_width(value: str, max_width: int) -> str:

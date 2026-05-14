@@ -252,7 +252,7 @@ class LivePanelRunner:
     def _is_ft8_scroll_active(self, snapshot: dict) -> bool:
         if not self._is_ft8_page(snapshot):
             return False
-        return ft8_scroll_metrics(snapshot, _station_callsign(snapshot)).active
+        return ft8_scroll_metrics(snapshot, _station_callsigns(snapshot)).active
 
     def _should_render_ft8_scroll(self, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
@@ -269,7 +269,7 @@ class LivePanelRunner:
         if not self._is_ft8_page(snapshot):
             self._clear_ft8_scroll_timeline()
             return
-        metrics = ft8_scroll_metrics(self.store.snapshot, _station_callsign(self.store.snapshot))
+        metrics = ft8_scroll_metrics(self.store.snapshot, _station_callsigns(self.store.snapshot))
         if not metrics.active:
             self._clear_ft8_scroll_timeline()
             return
@@ -301,7 +301,7 @@ class LivePanelRunner:
     def _next_ft8_scroll_wall_ms(self) -> int | None:
         if not self._is_ft8_page(self.store.snapshot):
             return None
-        metrics = ft8_scroll_metrics(self.store.snapshot, _station_callsign(self.store.snapshot))
+        metrics = ft8_scroll_metrics(self.store.snapshot, _station_callsigns(self.store.snapshot))
         if not metrics.active:
             return None
         base = self._ft8_scroll_wall_ms
@@ -320,14 +320,14 @@ class LivePanelRunner:
 
     def _commit_ft8_scroll(self, scroll_wall_ms: int, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
-        metrics = ft8_scroll_metrics(self.store.snapshot, _station_callsign(self.store.snapshot))
+        metrics = ft8_scroll_metrics(self.store.snapshot, _station_callsigns(self.store.snapshot))
         self._ft8_scroll_wall_ms = scroll_wall_ms
         self._next_ft8_scroll_at = now + metrics.dwell_ms / 1000 if metrics.active else None
 
     def _inject_ft8_scroll_clock(self, snapshot: dict, scroll_wall_ms: int | None = None) -> None:
         if not self._is_ft8_page(snapshot):
             return
-        metrics = ft8_scroll_metrics(snapshot, _station_callsign(snapshot))
+        metrics = ft8_scroll_metrics(snapshot, _station_callsigns(snapshot))
         if not metrics.active:
             return
         ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else None
@@ -369,7 +369,15 @@ def _is_ptt_active(snapshot: dict) -> bool:
     return bool(radio.get("ptt"))
 
 
-def _station_callsign(snapshot: dict) -> str | None:
+def _station_callsigns(snapshot: dict) -> list[str]:
     station = snapshot.get("station") if isinstance(snapshot.get("station"), dict) else {}
-    callsign = station.get("callsign")
-    return callsign.strip().upper() if isinstance(callsign, str) and callsign.strip() else None
+    callsigns = station.get("callsigns")
+    values = callsigns if isinstance(callsigns, list) else []
+    normalized: list[str] = []
+    for value in [*values, station.get("callsign")]:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        callsign = value.strip().upper()
+        if callsign not in normalized:
+            normalized.append(callsign)
+    return normalized

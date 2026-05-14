@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -242,8 +243,8 @@ def _normalize_access_url(url: Any) -> str:
 
 def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: TextMetrics) -> None:
     ft8 = snapshot.get("ft8") or {}
-    own = _station_callsign(snapshot)
-    decodes = _decode_window(_decode_entries(snapshot), snapshot, own_callsign=own)
+    own = _station_callsigns(snapshot)
+    decodes = _decode_window(_decode_entries(snapshot), snapshot, own_callsigns=own)
     for idx, entry in enumerate(decodes):
         y = 12 + idx * 10
         if is_cycle_header(entry):
@@ -260,7 +261,7 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str, metrics: 
             else max(8, country_left - FT8_COUNTRY_GAP - FT8_TEXT_X)
         )
         text = _clip_width(message, text_width, metrics=metrics)
-        if own and own in message.upper():
+        if is_own_entry(entry, own):
             _inverse_text(frame, FT8_TEXT_X, y, text, metrics)
         else:
             frame.text(FT8_TEXT_X, y, text)
@@ -526,13 +527,13 @@ def _decode_window(
     messages: list[Any],
     snapshot: Snapshot,
     rows: int = FT8_VISIBLE_ROWS,
-    own_callsign: str | None = None,
+    own_callsigns: str | Sequence[str] | None = None,
 ) -> list[Any]:
     values = [message for message in messages if _entry_message(message)]
     header_entries = [message for message in values if is_cycle_header(message)]
     body_entries = [message for message in values if not is_cycle_header(message)]
-    own_entries = [message for message in body_entries if is_own_entry(message, own_callsign)]
-    other_entries = [message for message in body_entries if not is_own_entry(message, own_callsign)]
+    own_entries = [message for message in body_entries if is_own_entry(message, own_callsigns)]
+    other_entries = [message for message in body_entries if not is_own_entry(message, own_callsigns)]
 
     if header_entries and own_entries:
         remaining_rows = rows - 1
@@ -711,7 +712,17 @@ def _text_width(text: str, font_size: int = 8, metrics: TextMetrics = DEFAULT_TE
     return metrics.text_width(text, font_size=font_size)
 
 
-def _station_callsign(snapshot: Snapshot) -> str | None:
+def _station_callsigns(snapshot: Snapshot) -> list[str]:
     station = snapshot.get("station") or {}
-    callsign = station.get("callsign") if isinstance(station, dict) else None
-    return callsign.strip().upper() if isinstance(callsign, str) and callsign.strip() else None
+    if not isinstance(station, dict):
+        return []
+    callsigns = station.get("callsigns")
+    values = callsigns if isinstance(callsigns, list) else []
+    normalized: list[str] = []
+    for value in [*values, station.get("callsign")]:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        callsign = value.strip().upper()
+        if callsign not in normalized:
+            normalized.append(callsign)
+    return normalized

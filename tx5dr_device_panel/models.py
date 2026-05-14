@@ -56,7 +56,8 @@ Snapshot = dict[str, Any]
 
 DEFAULT_SNAPSHOT: Snapshot = {
     "server": {"status": "ok", "version": "unknown", "webPort": None},
-    "station": {"callsign": None},
+    "station": {"callsign": None, "callsigns": []},
+    "operators": [],
     "engine": {"running": False, "mode": None, "currentMode": None, "state": None},
     "radio": {"connected": False, "frequency": None, "radioMode": None, "ptt": False, "tx": False},
     "ft8": {

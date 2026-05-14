@@ -290,6 +290,26 @@ def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
     assert any(command.kind == "filled_rect" and command.y in {12, 22, 32, 42} for command in frame.commands)
 
 
+def test_ft8_monitor_highlights_any_server_operator_callsign():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    payload["station"] = {"callsign": "BG5DRB", "callsigns": ["BG5AAA", "BG5BBB"]}
+    payload["ft8"]["recentFramesSlotId"] = "FT8-OPS"
+    payload["ft8"]["recentFramesSlotStartMs"] = 0
+    payload["ft8"]["recentFrames"] = [
+        {"slotId": "FT8-OPS", "slotStartMs": 0, "message": "K1ABC BG5AAA -10"},
+        {"slotId": "FT8-OPS", "slotStartMs": 0, "message": "BG5BBB K1ABC R-12"},
+        *[{"slotId": "FT8-OPS", "slotStartMs": 0, "message": f"MSG {index}"} for index in range(8)],
+    ]
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+    frame = render_snapshot(snapshot)
+    lines = _ft8_row_texts(frame)
+
+    assert lines[:3] == ["00:00:00 UTC · 40m · FT8", "K1ABC BG5AAA -10", "BG5BBB K1ABC R-12"]
+    assert all("MSG" not in line for line in lines[1:3])
+    assert sum(command.kind == "filled_rect" and command.y in {22, 32} for command in frame.commands) >= 2
+
+
 def test_ft8_country_labels_use_server_fields_and_global_language_parameter():
     store = PanelStore()
     payload = json.loads((FIXTURES / "ft8.json").read_text())

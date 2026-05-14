@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import floor
@@ -155,17 +156,21 @@ def ft8_cycle_header_label(snapshot: dict[str, Any]) -> str:
     return " · ".join(parts)
 
 
-def is_own_entry(entry: Any, own_callsign: str | None) -> bool:
+def is_own_entry(entry: Any, own_callsigns: str | Sequence[str] | None) -> bool:
     if is_cycle_header(entry):
         return False
-    own = (own_callsign or "").strip().upper()
-    return bool(own and own in entry_message(entry).upper())
+    message = entry_message(entry).upper()
+    callsigns = [own_callsigns] if isinstance(own_callsigns, str) else list(own_callsigns or [])
+    return any(callsign and callsign.strip().upper() in message for callsign in callsigns)
 
 
-def ft8_scroll_metrics(snapshot: dict[str, Any], own_callsign: str | None = None) -> Ft8ScrollMetrics:
+def ft8_scroll_metrics(
+    snapshot: dict[str, Any],
+    own_callsigns: str | Sequence[str] | None = None,
+) -> Ft8ScrollMetrics:
     entries = ft8_display_entries(snapshot)
     has_header = any(is_cycle_header(entry) for entry in entries)
-    own_entries = [entry for entry in entries if is_own_entry(entry, own_callsign)]
+    own_entries = [entry for entry in entries if is_own_entry(entry, own_callsigns)]
     if has_header and own_entries:
         rows_after_header = FT8_VISIBLE_ROWS - 1
         if len(own_entries) >= rows_after_header:
@@ -176,7 +181,7 @@ def ft8_scroll_metrics(snapshot: dict[str, Any], own_callsign: str | None = None
             active_count = len([
                 entry
                 for entry in entries
-                if not is_cycle_header(entry) and not is_own_entry(entry, own_callsign)
+                if not is_cycle_header(entry) and not is_own_entry(entry, own_callsigns)
             ])
     elif len(own_entries) >= FT8_VISIBLE_ROWS:
         active_count = len(own_entries)
@@ -184,7 +189,7 @@ def ft8_scroll_metrics(snapshot: dict[str, Any], own_callsign: str | None = None
     else:
         fixed_rows = len(own_entries)
         rows = FT8_VISIBLE_ROWS - fixed_rows
-        active_count = len([entry for entry in entries if not is_own_entry(entry, own_callsign)])
+        active_count = len([entry for entry in entries if not is_own_entry(entry, own_callsigns)])
 
     active = rows > 0 and active_count > rows
     return Ft8ScrollMetrics(

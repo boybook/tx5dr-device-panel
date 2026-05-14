@@ -229,10 +229,11 @@ def test_live_loop_sleep_uses_nearest_deadline_without_busy_loop(monkeypatch):
 def test_live_ft8_own_rows_suppress_other_overflow_animation():
     runner = LivePanelRunner(PanelConfig(), sink=type("Sink", (), {"display": lambda *args, **kwargs: True, "flush_pending": lambda self: False})())
     payload = json.loads((FIXTURES / "ft8.json").read_text())
-    payload["station"] = {"callsign": "BG5DRB"}
+    payload["station"] = {"callsign": "BG5DRB", "callsigns": ["BG5AAA", "BG5BBB"]}
     payload["ft8"]["recentFramesSlotId"] = "FT8-LIVE"
     payload["ft8"]["recentFrames"] = [
-        *[{"slotId": "FT8-LIVE", "message": f"BG5DRB K{index}ABC R-12"} for index in range(4)],
+        *[{"slotId": "FT8-LIVE", "message": f"BG5AAA K{index}ABC R-12"} for index in range(2)],
+        *[{"slotId": "FT8-LIVE", "message": f"BG5BBB K{index}ABC R-12"} for index in range(2)],
         *[{"slotId": "FT8-LIVE", "message": f"MSG {index}"} for index in range(20)],
     ]
     runner.store.now_ms = lambda: 0

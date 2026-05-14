@@ -44,3 +44,41 @@ def test_live_render_injects_last_error_without_persisting_it(monkeypatch):
     runner._render_current()
 
     assert "lastError" not in captured["snapshot"]["access"]
+
+
+def test_live_error_after_running_snapshot_renders_access_page(monkeypatch):
+    captured = {}
+
+    class Sink:
+        def display(self, image, tx_active=False, animated=False):
+            captured["tx_active"] = tx_active
+            captured["animated"] = animated
+            return True
+
+        def flush_pending(self):
+            return False
+
+    def fake_render_snapshot(snapshot, language="zh"):
+        captured["snapshot"] = snapshot
+        return RenderFrame()
+
+    monkeypatch.setattr("tx5dr_device_panel.live.read_network_status", lambda: {})
+    monkeypatch.setattr("tx5dr_device_panel.live.render_snapshot", fake_render_snapshot)
+
+    runner = LivePanelRunner(PanelConfig(), sink=Sink())
+    runner.store.apply({
+        "type": "snapshot",
+        "payload": {
+            "engine": {"running": True, "mode": "ft8"},
+            "radio": {"connected": True, "ptt": True},
+            "access": {"localUrl": "http://192.168.1.10:8076"},
+        },
+    })
+    runner.store.apply({"type": "error", "payload": {"message": "websocket disconnected"}})
+    runner._render_current()
+
+    assert captured["snapshot"]["engine"]["running"] is False
+    assert captured["snapshot"]["radio"]["ptt"] is False
+    assert captured["snapshot"]["access"]["lastError"] == "websocket disconnected"
+    assert captured["animated"] is True
+    assert captured["tx_active"] is False

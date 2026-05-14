@@ -10,12 +10,26 @@ def test_snapshot_event_merges_safe_defaults():
     assert snapshot["ft8"]["currentTx"]["active"] is False
 
 
-def test_error_event_does_not_replace_snapshot():
+def test_error_event_resets_stale_running_snapshot_to_access_state():
     store = PanelStore()
-    before = store.snapshot
+    store.apply({
+        "type": "snapshot",
+        "payload": {
+            "engine": {"running": True, "mode": "ft8"},
+            "radio": {"connected": True, "frequency": 7_074_000, "ptt": True},
+            "ft8": {"recentDecodeRawMessages": ["STALE"]},
+            "access": {"localUrl": "http://192.168.1.10:8076"},
+            "network": {"connected": True, "ip": "192.168.1.10", "transport": "wifi"},
+        },
+    })
     after = store.apply({"type": "error", "payload": {"message": "server down"}})
 
-    assert after is before
+    assert after["engine"]["running"] is False
+    assert after["radio"]["connected"] is False
+    assert after["radio"]["ptt"] is False
+    assert after["ft8"]["recentDecodeRawMessages"] == []
+    assert after["access"]["localUrl"] == "http://192.168.1.10:8076"
+    assert after["network"]["connected"] is True
     assert store.last_error == "server down"
 
 

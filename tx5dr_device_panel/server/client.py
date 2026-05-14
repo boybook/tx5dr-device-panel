@@ -57,6 +57,8 @@ class DeviceUiServerClient:
                 yield {"type": "bootstrap", "payload": await self.bootstrap(jwt)}
                 async for event in self.ws_events(jwt):
                     yield event
+                yield {"type": "error", "payload": {"message": "Device UI websocket disconnected"}}
+                await asyncio.sleep(self.config.reconnect_seconds)
             except Exception as exc:
                 yield {"type": "error", "payload": {"message": str(exc)}}
                 await asyncio.sleep(self.config.reconnect_seconds)

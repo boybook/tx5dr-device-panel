@@ -50,7 +50,7 @@ def reduce_event(current: Snapshot, event: dict[str, Any]) -> tuple[Snapshot, st
         return next_snapshot, None
     if event_type == "error":
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
-        return current, str(payload.get("message") or "Unknown server error")
+        return _offline_snapshot(current), str(payload.get("message") or "Unknown server error")
     return current, None
 
 
@@ -62,6 +62,17 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             result[key] = deepcopy(value)
     return result
+
+
+def _offline_snapshot(current: Snapshot) -> Snapshot:
+    snapshot = deepcopy(DEFAULT_SNAPSHOT)
+    access = current.get("access")
+    if isinstance(access, dict):
+        snapshot["access"] = _deep_merge(snapshot["access"], access)
+    network = current.get("network")
+    if isinstance(network, dict):
+        snapshot["network"] = _deep_merge(snapshot["network"], network)
+    return snapshot
 
 
 def _frame_batch_slot_id(ft8: dict[str, Any]) -> str | None:

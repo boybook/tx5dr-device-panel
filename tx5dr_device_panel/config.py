@@ -8,7 +8,10 @@ from typing import Any
 
 import yaml
 
-from tx5dr_device_panel.render.framebuffer import DEFAULT_DINKIE_FONT_PATH, DEFAULT_DINKIE_FONT_SIZE
+from tx5dr_device_panel.render.framebuffer import (
+    DEFAULT_FUSION_PIXEL_FONT_PATH,
+    DEFAULT_FUSION_PIXEL_FONT_SIZE,
+)
 
 
 DEFAULT_CONFIG_PATH = Path("/etc/tx5dr/device-panel.yaml")
@@ -29,8 +32,8 @@ class DisplayConfig:
     height: int = 64
     backend: str = "preview"
     scale: int = 4
-    font_path: str = DEFAULT_DINKIE_FONT_PATH
-    font_size: int = DEFAULT_DINKIE_FONT_SIZE
+    font_path: str = DEFAULT_FUSION_PIXEL_FONT_PATH
+    font_size: int = DEFAULT_FUSION_PIXEL_FONT_SIZE
 
 
 @dataclass(frozen=True)

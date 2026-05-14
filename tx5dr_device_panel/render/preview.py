@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from tx5dr_device_panel.render.framebuffer import FramebufferRenderer
+from tx5dr_device_panel.render.framebuffer import DEFAULT_FUSION_PIXEL_FONT_SIZE
 from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
 
@@ -12,7 +13,7 @@ def run_preview(
     fixtures: list[Path],
     scale: int = 4,
     font_path: str | None = None,
-    font_size: int = 8,
+    font_size: int = DEFAULT_FUSION_PIXEL_FONT_SIZE,
 ) -> None:
     import pygame
 

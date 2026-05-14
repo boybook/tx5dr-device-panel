@@ -39,10 +39,10 @@ def test_ptt_draws_global_indicator_and_border():
     assert any(command.kind == "filled_rect" and command.y == 0 for command in frame.commands)
 
 
-def test_renderer_uses_dinkie_bitmap_and_supports_chinese_text():
+def test_renderer_uses_bundled_fusion_pixel_font_and_supports_chinese_text():
     renderer = FramebufferRenderer()
 
-    assert renderer.font_path.endswith("DinkieBitmap-7px.ttf")
+    assert renderer.font_path.endswith("fusion-pixel-8px-monospaced-zh_hans.ttf")
     assert renderer.font.getbbox("中文状态")[2] > 0
     frame = render_snapshot(
         {

@@ -8,16 +8,19 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont
 from tx5dr_device_panel.models import DrawCommand, RenderFrame
 
 
-DEFAULT_DINKIE_FONT_PATH = (
-    "/Users/fangyizhou/Downloads/DinkieBitmap-v1.5.0-KeDingKeMao/ttf/"
-    "DinkieBitmap-7px.ttf"
+DEFAULT_FUSION_PIXEL_FONT_PATH = str(
+    Path(__file__).resolve().parents[1]
+    / "assets"
+    / "fonts"
+    / "fusion-pixel-font"
+    / "fusion-pixel-8px-monospaced-zh_hans.ttf"
 )
-DEFAULT_DINKIE_FONT_SIZE = 8
+DEFAULT_FUSION_PIXEL_FONT_SIZE = 8
 
 
 class FramebufferRenderer:
-    def __init__(self, font_path: str | None = None, font_size: int = DEFAULT_DINKIE_FONT_SIZE) -> None:
-        self.font_path = font_path or os.getenv("TX5DR_PANEL_FONT_PATH") or DEFAULT_DINKIE_FONT_PATH
+    def __init__(self, font_path: str | None = None, font_size: int = DEFAULT_FUSION_PIXEL_FONT_SIZE) -> None:
+        self.font_path = font_path or os.getenv("TX5DR_PANEL_FONT_PATH") or DEFAULT_FUSION_PIXEL_FONT_PATH
         self.font_size = font_size
         self.font = self._load_font()
 
@@ -62,7 +65,7 @@ class FramebufferRenderer:
         path = Path(self.font_path).expanduser()
         if not path.exists():
             raise FileNotFoundError(
-                f"DinkieBitmap font not found: {path}. "
-                "Set TX5DR_PANEL_FONT_PATH or display.font_path to the installed font file."
+                f"Fusion Pixel Font not found: {path}. "
+                "Set TX5DR_PANEL_FONT_PATH or display.font_path to another font file."
             )
         return ImageFont.truetype(str(path), size=self.font_size)

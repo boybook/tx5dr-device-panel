@@ -28,9 +28,9 @@ Precedence is CLI > environment > YAML > defaults.
 - Production YAML: `/etc/tx5dr/device-panel.yaml`
 - Development YAML: `./device-panel.dev.yaml`
 - Environment prefix: `TX5DR_PANEL_`
-- Font: DinkieBitmap 7px TTF is used for English and Chinese text. The font file is not bundled
-  because its EULA forbids redistribution; install it separately and set `display.font_path` on
-  target devices.
+- Font: Fusion Pixel Font 8px monospaced `zh_hans` TTF is bundled under SIL OFL 1.1 for
+  English and Chinese text. Font license files are in
+  `tx5dr_device_panel/assets/fonts/fusion-pixel-font/`.
 
 Example:
 
@@ -43,7 +43,7 @@ display:
   width: 128
   height: 64
   backend: "preview"
-  font_path: "/Users/fangyizhou/Downloads/DinkieBitmap-v1.5.0-KeDingKeMao/ttf/DinkieBitmap-7px.ttf"
+  font_path: "./tx5dr_device_panel/assets/fonts/fusion-pixel-font/fusion-pixel-8px-monospaced-zh_hans.ttf"
   font_size: 8
 hardware:
   controller: "sh1106"

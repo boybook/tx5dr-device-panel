@@ -13,6 +13,7 @@ def test_cli_overrides_defaults():
         scale=6,
         font_path="/tmp/fusion-pixel-8px-monospaced-zh_hans.ttf",
         font_size=8,
+        language="en",
         controller="sh1106",
         protocol="spi",
     )
@@ -24,5 +25,6 @@ def test_cli_overrides_defaults():
     assert config.display.backend == "snapshot"
     assert config.display.font_path == "/tmp/fusion-pixel-8px-monospaced-zh_hans.ttf"
     assert config.display.font_size == 8
+    assert config.language == "en"
     assert config.hardware.controller == "sh1106"
     assert config.hardware.protocol == "spi"

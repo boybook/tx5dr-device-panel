@@ -55,6 +55,7 @@ class PanelConfig:
     server: ServerConfig = ServerConfig()
     display: DisplayConfig = DisplayConfig()
     hardware: HardwareConfig = HardwareConfig()
+    language: str = "zh"
 
 
 def load_config(args: argparse.Namespace | None = None) -> PanelConfig:
@@ -86,13 +87,15 @@ def _from_mapping(data: dict[str, Any]) -> PanelConfig:
     server = ServerConfig(**{**ServerConfig().__dict__, **(data.get("server") or {})})
     display = DisplayConfig(**{**DisplayConfig().__dict__, **(data.get("display") or {})})
     hardware = HardwareConfig(**{**HardwareConfig().__dict__, **(data.get("hardware") or {})})
-    return PanelConfig(server=server, display=display, hardware=hardware)
+    language = str(data.get("language") or PanelConfig().language)
+    return PanelConfig(server=server, display=display, hardware=hardware, language=language)
 
 
 def _apply_env(config: PanelConfig) -> PanelConfig:
     server = config.server
     display = config.display
     hardware = config.hardware
+    language = config.language
     if value := os.getenv("TX5DR_PANEL_SERVER_URL"):
         server = replace(server, base_url=value)
     if value := os.getenv("TX5DR_PANEL_DEVICE_ID"):
@@ -105,11 +108,13 @@ def _apply_env(config: PanelConfig) -> PanelConfig:
         display = replace(display, font_path=value)
     if value := os.getenv("TX5DR_PANEL_FONT_SIZE"):
         display = replace(display, font_size=int(value))
+    if value := os.getenv("TX5DR_PANEL_LANGUAGE"):
+        language = value
     if value := os.getenv("TX5DR_PANEL_CONTROLLER"):
         hardware = replace(hardware, controller=value)
     if value := os.getenv("TX5DR_PANEL_PROTOCOL"):
         hardware = replace(hardware, protocol=value)
-    return PanelConfig(server=server, display=display, hardware=hardware)
+    return PanelConfig(server=server, display=display, hardware=hardware, language=language)
 
 
 def _apply_cli(config: PanelConfig, args: argparse.Namespace | None) -> PanelConfig:
@@ -118,6 +123,7 @@ def _apply_cli(config: PanelConfig, args: argparse.Namespace | None) -> PanelCon
     server = config.server
     display = config.display
     hardware = config.hardware
+    language = config.language
     if getattr(args, "server_url", None):
         server = replace(server, base_url=args.server_url)
     if getattr(args, "device_id", None):
@@ -132,8 +138,10 @@ def _apply_cli(config: PanelConfig, args: argparse.Namespace | None) -> PanelCon
         display = replace(display, font_path=args.font_path)
     if getattr(args, "font_size", None):
         display = replace(display, font_size=args.font_size)
+    if getattr(args, "language", None):
+        language = args.language
     if getattr(args, "controller", None):
         hardware = replace(hardware, controller=args.controller)
     if getattr(args, "protocol", None):
         hardware = replace(hardware, protocol=args.protocol)
-    return PanelConfig(server=server, display=display, hardware=hardware)
+    return PanelConfig(server=server, display=display, hardware=hardware, language=language)

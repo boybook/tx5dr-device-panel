@@ -9,6 +9,9 @@ Python MVP for a read-only TX-5DR `128x64` OLED status panel.
 - Renders Access, FT8, and Voice status pages to a `128x64` frame.
 - Uses `station.callsign` from the server device snapshot to highlight FT8 messages involving
   the local station; the panel does not accept a callsign override.
+- Uses the server-provided FT8 frame location fields for country/region labels; Python does
+  not calculate countries from callsigns.
+- Has a global UI `language` setting (`zh`/`en`) that is shared by current and future labels.
 - Supports deterministic PNG snapshots, pygame preview, and luma.oled hardware output.
 - Supports SSD1306/SH1106 over I2C or SPI by configuration.
 
@@ -20,7 +23,7 @@ No pairing code, login flow, network mutation, or panel-side control action exis
 uv venv
 uv pip install -e ".[dev]"
 tx5dr-device-panel snapshot --fixture fixtures/ft8.json --output out/ft8.png
-tx5dr-device-panel preview --fixture fixtures/access.json
+tx5dr-device-panel --language zh preview --fixture fixtures/access.json
 ```
 
 ## Configuration
@@ -41,6 +44,7 @@ server:
   base_url: "http://127.0.0.1:8076"
   device_id: "panel-1"
   token_file: "/var/lib/tx5dr/.device-ui-token"
+language: "zh"
 display:
   width: 128
   height: 64

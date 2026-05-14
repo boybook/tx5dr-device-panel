@@ -3,19 +3,27 @@ from __future__ import annotations
 from typing import Any
 
 from tx5dr_device_panel.models import DISPLAY_HEIGHT, DISPLAY_WIDTH, RenderFrame, Snapshot
+from tx5dr_device_panel.ui.status_bar import format_frequency, render_status_bar
 
 
-def render_snapshot(snapshot: Snapshot) -> RenderFrame:
+FT8_TEXT_X = 2
+FT8_COUNTRY_RIGHT_X = 126
+FT8_COUNTRY_WIDTH = 44
+FT8_COUNTRY_GAP = 4
+FT8_FOOTER_Y = 55
+
+
+def render_snapshot(snapshot: Snapshot, language: str = "zh") -> RenderFrame:
     frame = RenderFrame(DISPLAY_WIDTH, DISPLAY_HEIGHT)
-    _status_bar(frame, snapshot)
     page = _select_page(snapshot)
+    render_status_bar(frame, snapshot, page=page, ptt_active=_is_ptt_active(snapshot))
     if page == "access":
         _render_access(frame, snapshot)
     elif page == "voice":
         _render_voice(frame, snapshot)
     else:
-        _render_ft8(frame, snapshot)
-    _tx_overlay(frame, snapshot)
+        _render_ft8(frame, snapshot, language=language)
+    _ptt_overlay(frame, snapshot)
     return frame
 
 
@@ -27,18 +35,6 @@ def _select_page(snapshot: Snapshot) -> str:
     if engine.get("mode") == "voice" or mode_name in {"VOICE", "SSB", "AM", "FM"}:
         return "voice"
     return "ft8"
-
-
-def _status_bar(frame: RenderFrame, snapshot: Snapshot) -> None:
-    tx = _is_tx(snapshot)
-    frame.filled_rect(0, 0, 127, 9, fill=1 if tx else 0)
-    frame.line(0, 9, 127, 9, fill=1)
-    utc = _utc_text(snapshot)
-    label = f"TX {utc}" if tx else f"UTC {utc}"
-    frame.text(2, 1, _clip(label, 13), fill=0 if tx else 1)
-    if _select_page(snapshot) == "ft8":
-        mode_freq = f"{_mode_name(snapshot).upper() or 'FT8'} · {format_frequency((snapshot.get('radio') or {}).get('frequency'))}"
-        _right_text(frame, 126, 1, mode_freq, fill=0 if tx else 1)
 
 
 def _render_access(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -56,23 +52,41 @@ def _render_access(frame: RenderFrame, snapshot: Snapshot) -> None:
     frame.rect(0, 10, 127, 63)
 
 
-def _render_ft8(frame: RenderFrame, snapshot: Snapshot) -> None:
+def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
     ft8 = snapshot.get("ft8") or {}
     own = _station_callsign(snapshot)
-    decodes = _decode_window(list(ft8.get("recentDecodeRawMessages") or []), snapshot, own_callsign=own)
-    for idx, message in enumerate(decodes):
+    decodes = _decode_window(_decode_entries(ft8), snapshot, own_callsign=own)
+    for idx, entry in enumerate(decodes):
         y = 13 + idx * 10
-        text = _clip(str(message), 31)
-        if own and own in str(message).upper():
-            _inverse_text(frame, 2, y, text)
+        message = _entry_message(entry)
+        country = _country_label(entry, language)
+        country_text = _clip_width(country, FT8_COUNTRY_WIDTH) if country else ""
+        country_width = _text_width(country_text)
+        country_left = FT8_COUNTRY_RIGHT_X - country_width
+        text_width = (
+            DISPLAY_WIDTH - FT8_TEXT_X - 1
+            if not country_text
+            else max(8, country_left - FT8_COUNTRY_GAP - FT8_TEXT_X)
+        )
+        text = _clip_width(message, text_width)
+        if own and own in message.upper():
+            _inverse_text(frame, FT8_TEXT_X, y, text)
         else:
-            frame.text(2, y, text)
+            frame.text(FT8_TEXT_X, y, text)
+        if country_text:
+            _right_text(frame, FT8_COUNTRY_RIGHT_X, y, country_text)
     tx = ft8.get("currentTx") or {}
     tx_text = tx.get("lastMessage") or (tx.get("messages") or [None])[-1] or "RX MONITOR"
     frame.line(0, 53, 127, 53)
     count = _cycle_message_count(ft8)
-    count_label = f"S{_cycle_number(ft8)} ×{count}"
-    frame.text(2, 55, _clip(f"TX {tx_text}" if tx.get("active") else str(tx_text), 25))
+    count_label = f"{_cycle_utc_compact(ft8)} ×{count}"
+    _render_ft8_footer(
+        frame,
+        tx_text=str(tx_text),
+        tx_armed=_is_tx_armed(snapshot),
+        ptt_active=_is_ptt_active(snapshot),
+        count_label=count_label,
+    )
     _right_text(frame, 126, 55, count_label)
 
 
@@ -88,17 +102,42 @@ def _render_voice(frame: RenderFrame, snapshot: Snapshot) -> None:
     frame.text(2, 50, _clip(f"{ptt} {keyer}", 20))
 
 
-def _tx_overlay(frame: RenderFrame, snapshot: Snapshot) -> None:
-    if not _is_tx(snapshot):
+def _ptt_overlay(frame: RenderFrame, snapshot: Snapshot) -> None:
+    if not _is_ptt_active(snapshot):
         return
     frame.rect(0, 0, 127, 63)
     frame.rect(1, 1, 126, 62)
 
 
-def _is_tx(snapshot: Snapshot) -> bool:
+def _is_ptt_active(snapshot: Snapshot) -> bool:
     radio = snapshot.get("radio") or {}
-    ft8_tx = ((snapshot.get("ft8") or {}).get("currentTx") or {}).get("active")
-    return bool(radio.get("ptt") or radio.get("tx") or ft8_tx)
+    return bool(radio.get("ptt"))
+
+
+def _is_tx_armed(snapshot: Snapshot) -> bool:
+    return bool(((snapshot.get("ft8") or {}).get("currentTx") or {}).get("active"))
+
+
+def _render_ft8_footer(
+    frame: RenderFrame,
+    tx_text: str,
+    tx_armed: bool,
+    ptt_active: bool,
+    count_label: str,
+) -> None:
+    count_width = _text_width(count_label)
+    content_right = 126 - count_width - 4
+    tx_indicator_active = tx_armed or ptt_active
+    if not tx_indicator_active:
+        frame.text(2, FT8_FOOTER_Y, _clip_width(tx_text, content_right - 2))
+        return
+
+    label = "TX"
+    label_width = _text_width(label)
+    frame.filled_rect(1, FT8_FOOTER_Y, 2 + label_width, 63, fill=1)
+    frame.text(2, FT8_FOOTER_Y, label, fill=0)
+    message_x = 2 + label_width + 4
+    frame.text(message_x, FT8_FOOTER_Y, _clip_width(tx_text, max(8, content_right - message_x)))
 
 
 def _mode_name(snapshot: Snapshot) -> str:
@@ -109,26 +148,21 @@ def _mode_name(snapshot: Snapshot) -> str:
     return str(engine.get("mode") or "")
 
 
-def _utc_text(snapshot: Snapshot) -> str:
-    updated_at = snapshot.get("updatedAt")
-    if isinstance(updated_at, (int, float)) and updated_at > 0:
-        total_seconds = int(updated_at / 1000) % 86_400
-        return f"{total_seconds // 3600:02d}:{(total_seconds // 60) % 60:02d}:{total_seconds % 60:02d}"
-    return "--:--:--"
-
-
-def format_frequency(value: Any) -> str:
-    if not isinstance(value, (int, float)):
-        return "--.---"
-    if value >= 1_000_000:
-        return f"{value / 1_000_000:.3f}"
-    if value >= 1_000:
-        return f"{value / 1_000:.1f}k"
-    return str(value)
-
-
 def _clip(value: str, chars: int) -> str:
     return value if len(value) <= chars else value[: max(0, chars - 1)] + ">"
+
+
+def _clip_width(value: str, width: int) -> str:
+    if _text_width(value) <= width:
+        return value
+    marker = ">"
+    marker_width = _text_width(marker)
+    result = ""
+    for char in value:
+        if _text_width(result + char) > width - marker_width:
+            break
+        result += char
+    return result + marker
 
 
 def _decode_window(
@@ -136,8 +170,8 @@ def _decode_window(
     snapshot: Snapshot,
     rows: int = 4,
     own_callsign: str | None = None,
-) -> list[str]:
-    values = [str(message) for message in messages if str(message)]
+) -> list[Any]:
+    values = [message for message in messages if _entry_message(message)]
     if len(values) <= rows:
         return values
     # Advance one row every two seconds so crowded FT8 slots remain readable.
@@ -148,9 +182,33 @@ def _decode_window(
     own = (own_callsign or "").strip().upper()
     if not own:
         return rotated[:rows]
-    priority = [message for message in values if own in message.upper()]
+    priority = [message for message in values if own in _entry_message(message).upper()]
     filler = [message for message in rotated if message not in priority]
     return (priority + filler)[:rows]
+
+
+def _decode_entries(ft8: dict[str, Any]) -> list[Any]:
+    frames = ft8.get("recentFrames")
+    if isinstance(frames, list) and frames:
+        return frames
+    return list(ft8.get("recentDecodeRawMessages") or [])
+
+
+def _entry_message(entry: Any) -> str:
+    if isinstance(entry, dict):
+        message = entry.get("message")
+        return message if isinstance(message, str) else ""
+    return str(entry) if entry is not None else ""
+
+
+def _country_label(entry: Any, language: str) -> str:
+    if not isinstance(entry, dict):
+        return ""
+    if language.lower().startswith("zh"):
+        value = entry.get("countryZh") or entry.get("country") or entry.get("countryEn")
+    else:
+        value = entry.get("countryEn") or entry.get("country") or entry.get("countryZh")
+    return value if isinstance(value, str) else ""
 
 
 def _cycle_message_count(ft8: dict[str, Any]) -> int:
@@ -161,14 +219,19 @@ def _cycle_message_count(ft8: dict[str, Any]) -> int:
     return len(messages) if isinstance(messages, list) else 0
 
 
-def _cycle_number(ft8: dict[str, Any]) -> str:
-    cycle = ft8.get("cycle")
-    if isinstance(cycle, (int, float)):
-        return str(int(cycle))
+def _cycle_utc_compact(ft8: dict[str, Any]) -> str:
+    utc_seconds = ft8.get("utc")
+    if isinstance(utc_seconds, (int, float)):
+        return _format_utc_compact(utc_seconds)
     slot = ft8.get("slot")
-    if isinstance(slot, dict) and isinstance(slot.get("cycleNumber"), (int, float)):
-        return str(int(slot["cycleNumber"]))
-    return "-"
+    if isinstance(slot, dict) and isinstance(slot.get("utcSeconds"), (int, float)):
+        return _format_utc_compact(slot["utcSeconds"])
+    return "------"
+
+
+def _format_utc_compact(utc_seconds: float) -> str:
+    total_seconds = int(utc_seconds) % 86_400
+    return f"{total_seconds // 3600:02d}{(total_seconds // 60) % 60:02d}{total_seconds % 60:02d}"
 
 
 def _inverse_text(frame: RenderFrame, x: int, y: int, text: str) -> None:

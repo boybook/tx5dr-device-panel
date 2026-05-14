@@ -131,12 +131,13 @@ class LivePanelRunner:
             self._network_status = read_network_status()
             self._last_network_refresh = now
         snapshot["network"] = {**snapshot.get("network", {}), **self._network_status}
-        image = self.renderer.render(render_snapshot(snapshot))
-        self.sink.display(image, tx_active=_is_tx(snapshot))
+        image = self.renderer.render(
+            render_snapshot(snapshot, language=self.config.language)
+        )
+        self.sink.display(image, tx_active=_is_ptt_active(snapshot))
         self._last_rendered_second = int(time.time())
 
 
-def _is_tx(snapshot: dict) -> bool:
+def _is_ptt_active(snapshot: dict) -> bool:
     radio = snapshot.get("radio") or {}
-    current_tx = ((snapshot.get("ft8") or {}).get("currentTx") or {})
-    return bool(radio.get("ptt") or radio.get("tx") or current_tx.get("active"))
+    return bool(radio.get("ptt"))

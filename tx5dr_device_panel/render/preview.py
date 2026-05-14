@@ -14,6 +14,7 @@ def run_preview(
     scale: int = 4,
     font_path: str | None = None,
     font_size: int = DEFAULT_FUSION_PIXEL_FONT_SIZE,
+    language: str = "zh",
 ) -> None:
     import pygame
 
@@ -38,7 +39,7 @@ def run_preview(
                     index = (index - 1) % len(fixtures)
 
         snapshot = _load_fixture(fixtures[index])
-        image = renderer.render(render_snapshot(snapshot)).convert("RGB")
+        image = renderer.render(render_snapshot(snapshot, language=language)).convert("RGB")
         raw = image.resize((128 * scale, 64 * scale)).tobytes()
         frame = pygame.image.frombuffer(raw, (128 * scale, 64 * scale), "RGB")
         surface.blit(frame, (0, 0))

@@ -65,6 +65,8 @@ DEFAULT_SNAPSHOT: Snapshot = {
         "periodMs": None,
         "recentDecodeRawMessages": [],
         "lastDecodeRawMessage": None,
+        "recentFramesSlotId": None,
+        "recentFramesSlotStartMs": None,
         "recentFrames": [],
         "currentTx": {
             "active": False,

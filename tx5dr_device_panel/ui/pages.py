@@ -37,8 +37,8 @@ def _status_bar(frame: RenderFrame, snapshot: Snapshot) -> None:
     label = f"TX {utc}" if tx else f"UTC {utc}"
     frame.text(2, 1, _clip(label, 13), fill=0 if tx else 1)
     if _select_page(snapshot) == "ft8":
-        freq = format_frequency((snapshot.get("radio") or {}).get("frequency"))
-        _right_text(frame, 126, 1, freq, fill=0 if tx else 1)
+        mode_freq = f"{_mode_name(snapshot).upper() or 'FT8'} · {format_frequency((snapshot.get('radio') or {}).get('frequency'))}"
+        _right_text(frame, 126, 1, mode_freq, fill=0 if tx else 1)
 
 
 def _render_access(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -71,7 +71,7 @@ def _render_ft8(frame: RenderFrame, snapshot: Snapshot) -> None:
     tx_text = tx.get("lastMessage") or (tx.get("messages") or [None])[-1] or "RX MONITOR"
     frame.line(0, 53, 127, 53)
     count = _cycle_message_count(ft8)
-    count_label = f"×{count}"
+    count_label = f"S{_cycle_number(ft8)} ×{count}"
     frame.text(2, 55, _clip(f"TX {tx_text}" if tx.get("active") else str(tx_text), 25))
     _right_text(frame, 126, 55, count_label)
 
@@ -110,14 +110,6 @@ def _mode_name(snapshot: Snapshot) -> str:
 
 
 def _utc_text(snapshot: Snapshot) -> str:
-    ft8 = snapshot.get("ft8") or {}
-    utc_seconds = ft8.get("utc")
-    if isinstance(utc_seconds, (int, float)):
-        return (
-            f"{int(utc_seconds // 3600) % 24:02d}:"
-            f"{int(utc_seconds // 60) % 60:02d}:"
-            f"{int(utc_seconds) % 60:02d}"
-        )
     updated_at = snapshot.get("updatedAt")
     if isinstance(updated_at, (int, float)) and updated_at > 0:
         total_seconds = int(updated_at / 1000) % 86_400
@@ -167,6 +159,16 @@ def _cycle_message_count(ft8: dict[str, Any]) -> int:
         return len(frames)
     messages = ft8.get("recentDecodeRawMessages")
     return len(messages) if isinstance(messages, list) else 0
+
+
+def _cycle_number(ft8: dict[str, Any]) -> str:
+    cycle = ft8.get("cycle")
+    if isinstance(cycle, (int, float)):
+        return str(int(cycle))
+    slot = ft8.get("slot")
+    if isinstance(slot, dict) and isinstance(slot.get("cycleNumber"), (int, float)):
+        return str(int(slot["cycleNumber"]))
+    return "-"
 
 
 def _inverse_text(frame: RenderFrame, x: int, y: int, text: str) -> None:

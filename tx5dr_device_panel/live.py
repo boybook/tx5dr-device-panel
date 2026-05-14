@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import asyncio
 import contextlib
+import time
 from typing import Protocol
 
 from PIL import Image
@@ -89,15 +90,16 @@ class LivePanelRunner:
             font_size=config.display.font_size,
         )
         self.sink = sink or self._create_sink()
+        self._last_rendered_second = -1
+        self._last_network_refresh = 0.0
+        self._network_status: dict[str, object] = {}
 
     async def run(self) -> None:
         flush_task = asyncio.create_task(self._flush_loop())
         try:
             async for event in self.client.connect_forever():
-                snapshot = self.store.apply(event)
-                snapshot["network"] = {**snapshot.get("network", {}), **read_network_status()}
-                image = self.renderer.render(render_snapshot(snapshot))
-                self.sink.display(image, tx_active=_is_tx(snapshot))
+                self.store.apply(event)
+                self._render_current(update_clock=True, force_network=True)
         finally:
             flush_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -116,6 +118,22 @@ class LivePanelRunner:
             flush_pending = getattr(self.sink, "flush_pending", None)
             if flush_pending:
                 flush_pending()
+            current_second = int(time.time())
+            if current_second != self._last_rendered_second:
+                self._render_current(update_clock=True)
+
+    def _render_current(self, update_clock: bool = False, force_network: bool = False) -> None:
+        snapshot = self.store.snapshot
+        if update_clock:
+            snapshot["updatedAt"] = int(time.time() * 1000)
+        now = time.monotonic()
+        if force_network or now - self._last_network_refresh > 5:
+            self._network_status = read_network_status()
+            self._last_network_refresh = now
+        snapshot["network"] = {**snapshot.get("network", {}), **self._network_status}
+        image = self.renderer.render(render_snapshot(snapshot))
+        self.sink.display(image, tx_active=_is_tx(snapshot))
+        self._last_rendered_second = int(time.time())
 
 
 def _is_tx(snapshot: dict) -> bool:

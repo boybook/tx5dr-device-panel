@@ -59,7 +59,7 @@ def test_renderer_uses_bundled_fusion_pixel_font_and_supports_chinese_text():
 def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
     store = PanelStore()
     payload = json.loads((FIXTURES / "ft8.json").read_text())
-    payload["updatedAt"] = 1_778_740_815_000
+    payload["updatedAt"] = 43_215_000
     payload["ft8"]["utc"] = 43_215
     payload["ft8"]["recentDecodeRawMessages"] = [
         "CQ JA1AAA PM95",
@@ -76,7 +76,7 @@ def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
     texts = [command.text for command in frame.commands if command.kind == "text"]
 
     assert any(text and "UTC 12:00:15" in text for text in texts)
-    assert "7.074" in texts
-    assert "×10" in texts
+    assert "FT8 · 7.074" in texts
+    assert "S4 ×10" in texts
     assert sum(1 for command in frame.commands if command.kind == "text" and command.y in {13, 23, 33, 43}) == 4
     assert any(command.kind == "filled_rect" and command.y in {13, 23, 33, 43} for command in frame.commands)

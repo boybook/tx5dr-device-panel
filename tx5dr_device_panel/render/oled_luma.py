@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 
@@ -7,6 +8,8 @@ from PIL import Image
 from luma.oled.device import sh1106 as _LumaSH1106
 
 from tx5dr_device_panel.config import HardwareConfig
+
+logger = logging.getLogger("tx5dr.panel.backend")
 
 
 @dataclass
@@ -17,12 +20,18 @@ class OledLumaBackend:
     max_animation_fps: float = 4.0
 
     def __post_init__(self) -> None:
+        self._log_initializing()
         self.device = self._create_device()
         self._last_image: Image.Image | None = None
         self._pending_image: Image.Image | None = None
         self._pending_tx_active = False
         self._pending_animated = False
         self._last_flush = 0.0
+        logger.info(
+            "OLED backend initialized controller=%s protocol=%s",
+            self.config.controller,
+            self.config.protocol,
+        )
 
     def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         now = time.monotonic()
@@ -85,6 +94,33 @@ class OledLumaBackend:
                 column_offset=self.config.sh1106_column_offset,
             )
         raise ValueError(f"Unsupported OLED controller: {self.config.controller}")
+
+    def _log_initializing(self) -> None:
+        protocol = self.config.protocol.lower()
+        if protocol == "i2c":
+            logger.info(
+                "OLED backend initializing controller=%s protocol=i2c bus=%s address=0x%02X",
+                self.config.controller,
+                self.config.i2c_bus,
+                self.config.i2c_address,
+            )
+            return
+        if protocol == "spi":
+            logger.info(
+                "OLED backend initializing controller=%s protocol=spi port=%s device=%s dc=%s rst=%s cs=%s",
+                self.config.controller,
+                self.config.spi_port,
+                self.config.spi_device,
+                self.config.spi_dc,
+                self.config.spi_rst,
+                self.config.spi_cs,
+            )
+            return
+        logger.info(
+            "OLED backend initializing controller=%s protocol=%s",
+            self.config.controller,
+            self.config.protocol,
+        )
 
 
 class _configurable_sh1106(_LumaSH1106):

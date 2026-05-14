@@ -1,6 +1,8 @@
 import argparse
 
 from tx5dr_device_panel.config import load_config
+from tx5dr_device_panel.cli import build_parser
+from tx5dr_device_panel.logging_config import resolve_log_level
 
 
 def test_cli_overrides_defaults():
@@ -28,3 +30,20 @@ def test_cli_overrides_defaults():
     assert config.language == "en"
     assert config.hardware.controller == "sh1106"
     assert config.hardware.protocol == "spi"
+
+
+def test_log_level_defaults_to_info_and_allows_cli_override(monkeypatch):
+    monkeypatch.delenv("TX5DR_PANEL_LOG_LEVEL", raising=False)
+
+    parser = build_parser()
+    args = parser.parse_args(["--log-level", "debug", "live"])
+
+    assert resolve_log_level(None) == "INFO"
+    assert resolve_log_level(args.log_level) == "DEBUG"
+
+
+def test_log_level_can_come_from_environment(monkeypatch):
+    monkeypatch.setenv("TX5DR_PANEL_LOG_LEVEL", "warning")
+
+    assert resolve_log_level(None) == "WARNING"
+    assert resolve_log_level("ERROR") == "ERROR"

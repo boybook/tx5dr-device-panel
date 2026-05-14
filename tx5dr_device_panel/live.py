@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 import asyncio
 import contextlib
+import logging
 import time
 from typing import Protocol
 
@@ -19,6 +20,9 @@ from tx5dr_device_panel.state import PanelStore
 from tx5dr_device_panel.ui import render_snapshot
 from tx5dr_device_panel.ui.text_metrics import TextMetrics
 
+logger = logging.getLogger("tx5dr.panel.live")
+backend_logger = logging.getLogger("tx5dr.panel.backend")
+
 
 class ImageSink(Protocol):
     def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
@@ -31,6 +35,7 @@ class ImageSink(Protocol):
 class PngSink:
     def __init__(self, path: Path) -> None:
         self.path = path
+        backend_logger.info("Snapshot backend initialized output=%s", path)
 
     def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,12 +50,14 @@ class PygamePreviewSink:
     def __init__(self, scale: int = 4) -> None:
         import pygame
 
+        backend_logger.info("Preview backend initializing scale=%s", scale)
         self.pygame = pygame
         self.scale = max(1, scale)
         pygame.init()
         self.surface = pygame.display.set_mode((128 * self.scale, 64 * self.scale))
         pygame.display.set_caption("TX-5DR Device Panel Live Preview")
         self.clock = pygame.time.Clock()
+        backend_logger.info("Preview backend initialized scale=%s", self.scale)
 
     def display(self, image: Image.Image, tx_active: bool = False, animated: bool = False) -> bool:
         self._handle_events()
@@ -90,6 +97,17 @@ class LivePanelRunner:
 
     def __init__(self, config: PanelConfig, sink: ImageSink | None = None) -> None:
         self.config = config
+        logger.info(
+            "Initializing live panel backend=%s server=%s device_id=%s token_file=%s "
+            "language=%s controller=%s protocol=%s",
+            config.display.backend,
+            config.server.base_url,
+            config.server.device_id,
+            config.server.token_file,
+            config.language,
+            config.hardware.controller,
+            config.hardware.protocol,
+        )
         self.store = PanelStore()
         self._monotonic_origin = time.monotonic()
         self._wall_origin_ms = int(time.time() * 1000)
@@ -112,11 +130,14 @@ class LivePanelRunner:
         self._next_access_animation_at = 0.0
         self._last_network_refresh = 0.0
         self._network_status: dict[str, object] = {}
+        self._network_signature: tuple[object, ...] | None = None
 
     async def run(self) -> None:
+        logger.info("Live panel loop started reconnect_seconds=%.1f", self.config.server.reconnect_seconds)
         flush_task = asyncio.create_task(self._flush_loop())
         try:
             async for event in self.client.connect_forever():
+                logger.debug("Applying live event type=%s", event.get("type"))
                 self.store.apply(event)
                 self._sync_ft8_scroll_timeline()
                 self._render_current(update_clock=True, force_network=True)
@@ -170,8 +191,7 @@ class LivePanelRunner:
             snapshot["updatedAt"] = self._wall_ms(now)
         self._inject_ft8_scroll_clock(snapshot, scroll_wall_ms=scroll_wall_ms)
         if force_network or now - self._last_network_refresh > 5:
-            self._network_status = read_network_status()
-            self._last_network_refresh = now
+            self._refresh_network_status(now)
         snapshot["network"] = {**snapshot.get("network", {}), **self._network_status}
         if self.store.last_error:
             snapshot["access"] = {**snapshot.get("access", {}), "lastError": self.store.last_error}
@@ -193,6 +213,30 @@ class LivePanelRunner:
             self._commit_pending_ft8_scroll()
         self._last_rendered_second = self._wall_ms(now) // 1000
         return displayed
+
+    def _refresh_network_status(self, now: float) -> None:
+        status = read_network_status()
+        signature = (
+            status.get("connected"),
+            status.get("transport"),
+            status.get("interface"),
+            status.get("ip"),
+            status.get("ssid"),
+            status.get("hotspot"),
+        )
+        if signature != self._network_signature:
+            logger.info(
+                "Network status changed connected=%s transport=%s interface=%s ip=%s ssid=%s hotspot=%s",
+                status.get("connected"),
+                status.get("transport"),
+                status.get("interface"),
+                status.get("ip"),
+                status.get("ssid"),
+                status.get("hotspot"),
+            )
+            self._network_signature = signature
+        self._network_status = status
+        self._last_network_refresh = now
 
     def _is_access_page(self, snapshot: dict) -> bool:
         engine = snapshot.get("engine") or {}

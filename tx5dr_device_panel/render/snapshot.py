@@ -18,7 +18,9 @@ def render_fixture_to_png(
     data = json.loads(fixture.read_text(encoding="utf-8"))
     store = PanelStore()
     snapshot = store.apply({"type": "snapshot", "payload": data})
-    image = FramebufferRenderer(font_path=font_path, font_size=font_size).render(render_snapshot(snapshot))
+    image = FramebufferRenderer(font_path=font_path, font_size=font_size).render(
+        render_snapshot(snapshot)
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     image.save(output)
     return output

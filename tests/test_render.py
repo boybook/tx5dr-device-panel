@@ -54,3 +54,29 @@ def test_renderer_uses_bundled_fusion_pixel_font_and_supports_chinese_text():
     )
     image = renderer.render(frame)
     assert image.getbbox() is not None
+
+
+def test_ft8_monitor_uses_server_callsign_for_highlight_and_new_status_items():
+    store = PanelStore()
+    payload = json.loads((FIXTURES / "ft8.json").read_text())
+    payload["updatedAt"] = 1_778_740_815_000
+    payload["ft8"]["utc"] = 43_215
+    payload["ft8"]["recentDecodeRawMessages"] = [
+        "CQ JA1AAA PM95",
+        "CQ VK2XYZ QF56",
+        "K1ABC BG5DRB -10",
+        "CQ W6AAA CM87",
+        "CQ DL1AAA JO62",
+        "BG5DRB K1ABC R-12",
+    ]
+    payload["ft8"]["recentFrames"] = [{"message": str(i)} for i in range(10)]
+    snapshot = store.apply({"type": "snapshot", "payload": payload})
+
+    frame = render_snapshot(snapshot)
+    texts = [command.text for command in frame.commands if command.kind == "text"]
+
+    assert any(text and "UTC 12:00:15" in text for text in texts)
+    assert "7.074" in texts
+    assert "×10" in texts
+    assert sum(1 for command in frame.commands if command.kind == "text" and command.y in {13, 23, 33, 43}) == 4
+    assert any(command.kind == "filled_rect" and command.y in {13, 23, 33, 43} for command in frame.commands)

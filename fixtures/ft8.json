@@ -1,5 +1,6 @@
 {
   "engine": { "running": true, "mode": "digital", "currentMode": { "name": "FT8", "slotMs": 15000 }, "state": "running" },
+  "station": { "callsign": "BG5DRB" },
   "radio": { "connected": true, "frequency": 7074000, "radioMode": "USB-D", "ptt": false, "tx": false },
   "ft8": {
     "slot": { "id": "FT8-1", "startMs": 1778697600000, "phaseMs": 0, "cycleNumber": 4, "utcSeconds": 43215, "mode": "FT8" },

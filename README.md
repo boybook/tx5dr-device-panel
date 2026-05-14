@@ -7,6 +7,8 @@ Python MVP for a read-only TX-5DR `128x64` OLED status panel.
 - Talks to the TX-5DR server device API (`/api/device-ui/*`).
 - Maintains a local state store from bootstrap snapshots and websocket events.
 - Renders Access, FT8, and Voice status pages to a `128x64` frame.
+- Uses `station.callsign` from the server device snapshot to highlight FT8 messages involving
+  the local station; the panel does not accept a callsign override.
 - Supports deterministic PNG snapshots, pygame preview, and luma.oled hardware output.
 - Supports SSD1306/SH1106 over I2C or SPI by configuration.
 

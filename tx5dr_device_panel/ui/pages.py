@@ -34,11 +34,11 @@ def _status_bar(frame: RenderFrame, snapshot: Snapshot) -> None:
     frame.filled_rect(0, 0, 127, 9, fill=1 if tx else 0)
     frame.line(0, 9, 127, 9, fill=1)
     utc = _utc_text(snapshot)
-    slot = ((snapshot.get("ft8") or {}).get("cycle"))
     label = f"TX {utc}" if tx else f"UTC {utc}"
-    if slot is not None:
-        label = f"{label} S{slot}"
-    frame.text(2, 1, _clip(label, 20), fill=0 if tx else 1)
+    frame.text(2, 1, _clip(label, 13), fill=0 if tx else 1)
+    if _select_page(snapshot) == "ft8":
+        freq = format_frequency((snapshot.get("radio") or {}).get("frequency"))
+        _right_text(frame, 126, 1, freq, fill=0 if tx else 1)
 
 
 def _render_access(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -58,15 +58,22 @@ def _render_access(frame: RenderFrame, snapshot: Snapshot) -> None:
 
 def _render_ft8(frame: RenderFrame, snapshot: Snapshot) -> None:
     ft8 = snapshot.get("ft8") or {}
-    radio = snapshot.get("radio") or {}
-    frame.text(2, 12, _clip(f"FT8 {format_frequency(radio.get('frequency'))}", 20))
-    decodes = list(ft8.get("recentDecodeRawMessages") or [])[-3:]
+    own = _station_callsign(snapshot)
+    decodes = _decode_window(list(ft8.get("recentDecodeRawMessages") or []), snapshot, own_callsign=own)
     for idx, message in enumerate(decodes):
-        frame.text(2, 23 + idx * 9, _clip(str(message), 20))
+        y = 13 + idx * 10
+        text = _clip(str(message), 31)
+        if own and own in str(message).upper():
+            _inverse_text(frame, 2, y, text)
+        else:
+            frame.text(2, y, text)
     tx = ft8.get("currentTx") or {}
     tx_text = tx.get("lastMessage") or (tx.get("messages") or [None])[-1] or "RX MONITOR"
     frame.line(0, 53, 127, 53)
-    frame.text(2, 55, _clip(f"TX {tx_text}" if tx.get("active") else str(tx_text), 20))
+    count = _cycle_message_count(ft8)
+    count_label = f"×{count}"
+    frame.text(2, 55, _clip(f"TX {tx_text}" if tx.get("active") else str(tx_text), 25))
+    _right_text(frame, 126, 55, count_label)
 
 
 def _render_voice(frame: RenderFrame, snapshot: Snapshot) -> None:
@@ -106,12 +113,16 @@ def _utc_text(snapshot: Snapshot) -> str:
     ft8 = snapshot.get("ft8") or {}
     utc_seconds = ft8.get("utc")
     if isinstance(utc_seconds, (int, float)):
-        return f"{int(utc_seconds // 3600) % 24:02d}:{int(utc_seconds // 60) % 60:02d}"
+        return (
+            f"{int(utc_seconds // 3600) % 24:02d}:"
+            f"{int(utc_seconds // 60) % 60:02d}:"
+            f"{int(utc_seconds) % 60:02d}"
+        )
     updated_at = snapshot.get("updatedAt")
     if isinstance(updated_at, (int, float)) and updated_at > 0:
         total_seconds = int(updated_at / 1000) % 86_400
-        return f"{total_seconds // 3600:02d}:{(total_seconds // 60) % 60:02d}"
-    return "--:--"
+        return f"{total_seconds // 3600:02d}:{(total_seconds // 60) % 60:02d}:{total_seconds % 60:02d}"
+    return "--:--:--"
 
 
 def format_frequency(value: Any) -> str:
@@ -126,3 +137,53 @@ def format_frequency(value: Any) -> str:
 
 def _clip(value: str, chars: int) -> str:
     return value if len(value) <= chars else value[: max(0, chars - 1)] + ">"
+
+
+def _decode_window(
+    messages: list[Any],
+    snapshot: Snapshot,
+    rows: int = 4,
+    own_callsign: str | None = None,
+) -> list[str]:
+    values = [str(message) for message in messages if str(message)]
+    if len(values) <= rows:
+        return values
+    # Advance one row every two seconds so crowded FT8 slots remain readable.
+    updated_at = snapshot.get("updatedAt")
+    tick = int(updated_at / 2000) if isinstance(updated_at, (int, float)) else 0
+    start = tick % len(values)
+    rotated = values[start:] + values[:start]
+    own = (own_callsign or "").strip().upper()
+    if not own:
+        return rotated[:rows]
+    priority = [message for message in values if own in message.upper()]
+    filler = [message for message in rotated if message not in priority]
+    return (priority + filler)[:rows]
+
+
+def _cycle_message_count(ft8: dict[str, Any]) -> int:
+    frames = ft8.get("recentFrames")
+    if isinstance(frames, list) and frames:
+        return len(frames)
+    messages = ft8.get("recentDecodeRawMessages")
+    return len(messages) if isinstance(messages, list) else 0
+
+
+def _inverse_text(frame: RenderFrame, x: int, y: int, text: str) -> None:
+    width = min(126 - x, max(4, _text_width(text)))
+    frame.filled_rect(x - 1, y, x + width, min(52, y + 8), fill=1)
+    frame.text(x, y, text, fill=0)
+
+
+def _right_text(frame: RenderFrame, right_x: int, y: int, text: str, fill: int = 1) -> None:
+    frame.text(max(0, right_x - _text_width(text)), y, text, fill=fill)
+
+
+def _text_width(text: str) -> int:
+    return sum(8 if ord(char) > 127 else 4 for char in text)
+
+
+def _station_callsign(snapshot: Snapshot) -> str | None:
+    station = snapshot.get("station") or {}
+    callsign = station.get("callsign") if isinstance(station, dict) else None
+    return callsign.strip().upper() if isinstance(callsign, str) and callsign.strip() else None

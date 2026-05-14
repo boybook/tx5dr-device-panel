@@ -37,6 +37,48 @@ class PngSink:
         return False
 
 
+class PygamePreviewSink:
+    def __init__(self, scale: int = 4) -> None:
+        import pygame
+
+        self.pygame = pygame
+        self.scale = max(1, scale)
+        pygame.init()
+        self.surface = pygame.display.set_mode((128 * self.scale, 64 * self.scale))
+        pygame.display.set_caption("TX-5DR Device Panel Live Preview")
+        self.clock = pygame.time.Clock()
+
+    def display(self, image: Image.Image, tx_active: bool = False) -> bool:
+        self._handle_events()
+        image = image.convert("RGB").resize((128 * self.scale, 64 * self.scale), Image.Resampling.NEAREST)
+        frame = self.pygame.image.frombuffer(
+            image.tobytes(),
+            (128 * self.scale, 64 * self.scale),
+            "RGB",
+        )
+        self.surface.blit(frame, (0, 0))
+        self.pygame.display.flip()
+        self.clock.tick(30)
+        return True
+
+    def flush_pending(self) -> bool:
+        self._handle_events()
+        self.clock.tick(30)
+        return False
+
+    def _handle_events(self) -> None:
+        for event in self.pygame.event.get():
+            if event.type == self.pygame.QUIT:
+                self.pygame.quit()
+                raise KeyboardInterrupt
+            if event.type == self.pygame.KEYDOWN and event.key in {
+                self.pygame.K_ESCAPE,
+                self.pygame.K_q,
+            }:
+                self.pygame.quit()
+                raise KeyboardInterrupt
+
+
 class LivePanelRunner:
     def __init__(self, config: PanelConfig, sink: ImageSink | None = None) -> None:
         self.config = config
@@ -64,6 +106,8 @@ class LivePanelRunner:
     def _create_sink(self) -> ImageSink:
         if self.config.display.backend == "oled":
             return OledLumaBackend(self.config.hardware)
+        if self.config.display.backend == "preview":
+            return PygamePreviewSink(scale=self.config.display.scale)
         return PngSink(Path("out/live.png"))
 
     async def _flush_loop(self) -> None:

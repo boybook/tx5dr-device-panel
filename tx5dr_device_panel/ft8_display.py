@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from math import floor
 from typing import Any
 
@@ -10,6 +11,7 @@ FT8_MIN_DWELL_MS = 250
 FT8_MAX_DWELL_MS = 2500
 FT8_DEFAULT_PERIOD_MS = 15_000
 FT4_DEFAULT_PERIOD_MS = 7_500
+FT8_CYCLE_HEADER_KIND = "ft8_cycle_header"
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,10 @@ def entry_message(entry: Any) -> str:
         message = entry.get("message")
         return message if isinstance(message, str) else ""
     return str(entry) if entry is not None else ""
+
+
+def is_cycle_header(entry: Any) -> bool:
+    return isinstance(entry, dict) and entry.get("_kind") == FT8_CYCLE_HEADER_KIND
 
 
 def normalize_message(value: str) -> str:
@@ -106,6 +112,12 @@ def scroll_start_index(
 
 
 def ft8_display_entries(snapshot: dict[str, Any]) -> list[Any]:
+    entries = ft8_decode_entries(snapshot)
+    header = ft8_cycle_header_entry(snapshot)
+    return [header, *entries] if header else entries
+
+
+def ft8_decode_entries(snapshot: dict[str, Any]) -> list[Any]:
     ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
     frames = ft8.get("recentFrames")
     if isinstance(frames, list) and frames:
@@ -116,7 +128,30 @@ def ft8_display_entries(snapshot: dict[str, Any]) -> list[Any]:
     return []
 
 
+def ft8_cycle_header_entry(snapshot: dict[str, Any]) -> dict[str, str] | None:
+    label = ft8_cycle_header_label(snapshot)
+    return {"_kind": FT8_CYCLE_HEADER_KIND, "message": label} if label else None
+
+
+def ft8_cycle_header_label(snapshot: dict[str, Any]) -> str:
+    ft8 = snapshot.get("ft8") if isinstance(snapshot.get("ft8"), dict) else {}
+    time_label = _cycle_time_label(ft8)
+    if not time_label:
+        return ""
+
+    mode = _cycle_mode_label(snapshot, ft8)
+    band = _band_label(snapshot)
+    parts = [time_label]
+    if band:
+        parts.append(band)
+    if mode:
+        parts.append(mode)
+    return " · ".join(parts)
+
+
 def is_own_entry(entry: Any, own_callsign: str | None) -> bool:
+    if is_cycle_header(entry):
+        return False
     own = (own_callsign or "").strip().upper()
     return bool(own and own in entry_message(entry).upper())
 
@@ -137,3 +172,55 @@ def ft8_scroll_metrics(snapshot: dict[str, Any], own_callsign: str | None = None
         active=active,
         dwell_ms=scroll_dwell_ms(snapshot, active_count, rows) if active else FT8_MAX_DWELL_MS,
     )
+
+
+def _cycle_time_label(ft8: dict[str, Any]) -> str:
+    slot = ft8.get("slot") if isinstance(ft8.get("slot"), dict) else {}
+    for value in (ft8.get("recentFramesSlotStartMs"), slot.get("startMs")):
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value / 1000, UTC).strftime("%H:%M:%S UTC")
+    for value in (ft8.get("utc"), slot.get("utcSeconds")):
+        if isinstance(value, (int, float)):
+            total_seconds = int(value) % 86_400
+            return (
+                f"{total_seconds // 3600:02d}:"
+                f"{(total_seconds // 60) % 60:02d}:"
+                f"{total_seconds % 60:02d} UTC"
+            )
+    return ""
+
+
+def _cycle_mode_label(snapshot: dict[str, Any], ft8: dict[str, Any]) -> str:
+    slot = ft8.get("slot") if isinstance(ft8.get("slot"), dict) else {}
+    if slot.get("mode"):
+        return str(slot["mode"]).upper()
+    engine = snapshot.get("engine") if isinstance(snapshot.get("engine"), dict) else {}
+    current = engine.get("currentMode") if isinstance(engine.get("currentMode"), dict) else {}
+    return str(current.get("name") or engine.get("mode") or "FT8").upper()
+
+
+def _band_label(snapshot: dict[str, Any]) -> str:
+    radio = snapshot.get("radio") if isinstance(snapshot.get("radio"), dict) else {}
+    frequency = radio.get("frequency")
+    if not isinstance(frequency, (int, float)) or frequency <= 0:
+        return ""
+    mhz = frequency / 1_000_000
+    bands = (
+        ("160m", 1.8, 2.0),
+        ("80m", 3.5, 4.0),
+        ("60m", 5.0, 5.5),
+        ("40m", 7.0, 7.3),
+        ("30m", 10.1, 10.15),
+        ("20m", 14.0, 14.35),
+        ("17m", 18.068, 18.168),
+        ("15m", 21.0, 21.45),
+        ("12m", 24.89, 24.99),
+        ("10m", 28.0, 29.7),
+        ("6m", 50.0, 54.0),
+        ("2m", 144.0, 148.0),
+        ("70cm", 420.0, 450.0),
+    )
+    for label, lower, upper in bands:
+        if lower <= mhz <= upper:
+            return label
+    return ""

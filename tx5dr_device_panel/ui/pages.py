@@ -6,7 +6,10 @@ from typing import Any
 from tx5dr_device_panel.ft8_display import (
     FT8_VISIBLE_ROWS,
     entry_message as _ft8_entry_message,
+    ft8_cycle_header_entry,
+    ft8_decode_entries,
     is_own_entry,
+    is_cycle_header,
     scroll_start_index,
 )
 from tx5dr_device_panel.models import DISPLAY_HEIGHT, DISPLAY_WIDTH, RenderFrame, Snapshot
@@ -234,9 +237,12 @@ def _normalize_access_url(url: Any) -> str:
 def _render_ft8(frame: RenderFrame, snapshot: Snapshot, language: str) -> None:
     ft8 = snapshot.get("ft8") or {}
     own = _station_callsign(snapshot)
-    decodes = _decode_window(_decode_entries(ft8), snapshot, own_callsign=own)
+    decodes = _decode_window(_decode_entries(snapshot), snapshot, own_callsign=own)
     for idx, entry in enumerate(decodes):
         y = 12 + idx * 10
+        if is_cycle_header(entry):
+            _inverse_row(frame, y, _clip_width(_entry_message(entry), 124))
+            continue
         message = _entry_message(entry)
         country = _country_label(entry, language)
         country_text = _clip_width(country, FT8_COUNTRY_WIDTH) if country else ""
@@ -500,8 +506,6 @@ def _decode_window(
     own_callsign: str | None = None,
 ) -> list[Any]:
     values = [message for message in messages if _entry_message(message)]
-    if len(values) <= rows:
-        return values
     own_entries = [message for message in values if is_own_entry(message, own_callsign)]
     other_entries = [message for message in values if not is_own_entry(message, own_callsign)]
 
@@ -512,6 +516,9 @@ def _decode_window(
     if own_entries:
         remaining_rows = rows - len(own_entries)
         return own_entries + _scrolling_slice(other_entries, snapshot, remaining_rows)
+
+    if len(values) <= rows:
+        return values
 
     return _scrolling_slice(values, snapshot, rows)
 
@@ -525,11 +532,12 @@ def _scrolling_slice(values: list[Any], snapshot: Snapshot, rows: int) -> list[A
     return values[start:start + rows]
 
 
-def _decode_entries(ft8: dict[str, Any]) -> list[Any]:
-    frames = ft8.get("recentFrames")
-    if isinstance(frames, list) and frames:
-        return frames
-    return list(ft8.get("recentDecodeRawMessages") or [])
+def _decode_entries(snapshot: Snapshot) -> list[Any]:
+    return [
+        entry
+        for entry in [ft8_cycle_header_entry(snapshot), *ft8_decode_entries(snapshot)]
+        if entry
+    ]
 
 
 def _entry_message(entry: Any) -> str:
@@ -573,6 +581,11 @@ def _inverse_text(frame: RenderFrame, x: int, y: int, text: str) -> None:
     width = min(126 - x, max(4, _text_width(text)))
     frame.filled_rect(x - 1, y, x + width, min(52, y + 8), fill=1)
     frame.text(x, y, text, fill=0)
+
+
+def _inverse_row(frame: RenderFrame, y: int, text: str) -> None:
+    frame.filled_rect(0, y, 127, min(52, y + 8), fill=1)
+    frame.text(2, y, text, fill=0)
 
 
 def _right_text(frame: RenderFrame, right_x: int, y: int, text: str, fill: int = 1) -> None:

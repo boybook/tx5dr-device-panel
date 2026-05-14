@@ -303,25 +303,45 @@ def test_ft8_country_labels_use_server_fields_and_global_language_parameter():
     assert "Japan" in en_texts
 
 
+def test_ft8_cycle_header_renders_as_inverse_scroll_row():
+    snapshot = _ft8_scroll_snapshot(2, updated_at=0)
+    frame = render_snapshot(snapshot)
+    lines = _ft8_row_texts(frame)
+
+    assert lines[0] == "00:00:00 UTC · 40m · FT8"
+    assert any(
+        command.kind == "filled_rect"
+        and (command.x, command.y, command.x2, command.y2) == (0, 12, 127, 20)
+        for command in frame.commands
+    )
+
+
+def test_ft8_cycle_header_stays_when_cycle_has_no_decodes():
+    snapshot = _ft8_scroll_snapshot(0, updated_at=0)
+    lines = _ft8_row_texts(render_snapshot(snapshot))
+
+    assert lines == ["00:00:00 UTC · 40m · FT8"]
+
+
 def test_ft8_dynamic_scroll_uses_step_one_for_medium_batches():
     snapshot = _ft8_scroll_snapshot(6, updated_at=3000)
     lines = _ft8_row_texts(render_snapshot(snapshot))
 
-    assert lines == ["MSG 1", "MSG 2", "MSG 3", "MSG 4"]
+    assert lines == ["MSG 0", "MSG 1", "MSG 2", "MSG 3"]
 
 
 def test_ft8_dynamic_scroll_uses_step_two_for_large_batches():
     snapshot = _ft8_scroll_snapshot(10, updated_at=4000)
     lines = _ft8_row_texts(render_snapshot(snapshot))
 
-    assert lines == ["MSG 4", "MSG 5", "MSG 6", "MSG 7"]
+    assert lines == ["MSG 3", "MSG 4", "MSG 5", "MSG 6"]
 
 
 def test_ft8_dynamic_scroll_uses_page_step_for_crowded_batches():
     snapshot = _ft8_scroll_snapshot(20, updated_at=3000)
     lines = _ft8_row_texts(render_snapshot(snapshot))
 
-    assert lines == ["MSG 8", "MSG 9", "MSG 10", "MSG 11"]
+    assert lines == ["MSG 7", "MSG 8", "MSG 9", "MSG 10"]
 
 
 def test_ft8_own_callsign_rows_are_fixed_above_scrolling_traffic():
@@ -595,6 +615,14 @@ def _ft8_scroll_snapshot(count: int, updated_at: int, messages=None):
     payload["updatedAt"] = updated_at
     payload["station"] = {"callsign": "BG5DRB"}
     payload["ft8"]["periodMs"] = 15_000
+    payload["ft8"]["slot"] = {
+        "id": "FT8-SCROLL",
+        "startMs": 0,
+        "phaseMs": 0,
+        "cycleNumber": 0,
+        "utcSeconds": 0,
+        "mode": "FT8",
+    }
     payload["ft8"]["recentFramesSlotId"] = "FT8-SCROLL"
     payload["ft8"]["recentFramesSlotStartMs"] = 0
     payload["ft8"]["recentFrames"] = [
